@@ -6,7 +6,7 @@ The original conversion script also contains personal choices about tracks, loud
 
 ## Severity is not certainty
 
-The report's ERROR, WARNING and INFO labels indicate how much attention a finding deserves. They are **not confidence scores**, and there is no separate machine-readable confidence classification in version 0.1.0. Read the finding's detail, evidence, next step, and coverage together.
+The report's ERROR, WARNING and INFO labels indicate how much attention a finding deserves. They are **not confidence scores**, and there is no separate machine-readable confidence classification in version 0.1.x. Read the finding's detail, evidence, next step, and coverage together.
 
 | Kind of finding | What was actually established | What was not established |
 |---|---|---|
@@ -41,10 +41,6 @@ This is a **measured observation in the reported setup**, supporting a rate-cont
 | Fewer packets/frames or shorter duration than expected | Useful mismatch to investigate | Different editions, trims, packetization and timing can explain differences. A reference comparison is metadata only. |
 
 Exact thresholds and sampling details are in [CHECKS.md](../CHECKS.md). A measured threshold crossing is real as a measurement; its importance to playback may remain unproven.
-
-## SSL errors and disconnects
-
-An SSL error or connection close in a Plex log does not, on its own, establish the cause of buffering. Match the same session and request, place the error before or after the stall, and compare download timing, transcode output and client behavior. A connection can close after a user stops stalled playback. Errors from another session do not explain the session being investigated. This is diagnostic reasoning, not a conclusion that all SSL errors are harmless. Log analysis is outside this checker's scope.
 
 ## How to investigate a warning
 

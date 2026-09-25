@@ -10,7 +10,7 @@ An unofficial community project; not affiliated with or endorsed by Plex. Design
 
 **New to scripts? Follow the [step-by-step setup guide](docs/SETUP.md).** It explains what to download, how to open a terminal, and exactly what to type on each operating system. No coding knowledge, Git, or Python packages from pip are needed.
 
-You need Python 3.9 or newer (a currently supported version is recommended), plus a recent FFmpeg installation that includes ffprobe. Download **Plex-File-Check-v0.1.0.zip** from [Releases](https://github.com/SamMcFly/plex-file-check/releases/latest), extract it, and open a terminal in the extracted `Plex-File-Check` folder.
+You need Python 3.9 or newer (a currently supported version is recommended), plus a recent FFmpeg installation that includes ffprobe. Download **Plex-File-Check-v0.1.1.zip** from [Releases](https://github.com/SamMcFly/plex-file-check/releases/latest), extract it, and open a terminal in the extracted `Plex-File-Check` folder.
 
 Windows:
 
@@ -59,7 +59,7 @@ Start with the finding's explanation and suggested next step, then the **COVERAG
 
 It can examine timestamps, bitrate bursts, stream metadata, subtitle structure, decode errors, HDR signaling, and other properties of a local file. It cannot establish the cause of buffering from a file alone. Device capabilities, selected tracks, network conditions, and the server's actual output also matter.
 
-The author's reported **HEVC/QSV transcoding bitrate overshoot** is documented separately in [findings and limitations](docs/FINDINGS_AND_LIMITS.md#the-authors-hevcqsv-observation). Scanning an HEVC source does not establish that it has that server-side issue. SSL errors or disconnect messages in a Plex log also need a session timeline; this program does not analyze Plex logs.
+The author's reported **HEVC/QSV transcoding bitrate overshoot** is documented separately in [findings and limitations](docs/FINDINGS_AND_LIMITS.md#the-authors-hevcqsv-observation). Scanning an HEVC source does not establish that it has that server-side issue.
 
 The checker does not convert, repair, remux, rename, delete, or upload media. Temporary subtitle/HDR data is cleaned up. Reports hide the media name when `--redact-name` is used; still review a report before posting it. No third-party tool binaries or media are bundled.
 

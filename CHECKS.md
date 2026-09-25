@@ -25,7 +25,7 @@ For example, an 80 Mbps video peak in a 1080p file crosses this project's 50 Mbp
 
 ## What remains unconfirmed
 
-- **This is not a Plex transcoder test.** The program does not start a Plex transcode, compare its requested and delivered bitrates, read server logs, or reproduce the reported HEVC/QSV bitrate-overshoot behavior. A large HEVC source or a high-bitrate warning is not evidence of that issue.
+- **This is not a Plex transcoder test.** The program does not start a Plex transcode, compare its requested and delivered bitrates, or reproduce the reported HEVC/QSV bitrate-overshoot behavior. A large HEVC source or a high-bitrate warning is not evidence of that issue.
 - **A suspected playback cause needs a playback test.** Record the Plex app/device and server versions, selected audio/subtitles, Direct Play/Direct Stream/transcode decision, playback time, and observed symptom. Compare the same scene under controlled conditions before attributing a failure to a flagged property.
 - **Sampling cannot establish whole-file health.** Standard mode checks selected regions. Deep mode expands packet and decode coverage, but a clean software decode still does not certify picture quality, perceived lip-sync, language correctness, or client compatibility.
 - **A finding is not an automatic repair instruction.** No source media, volume, subtitle content, or metadata is changed. Optional analysis can create temporary metadata/subtitle copies. Test any proposed fix on a copy before replacing a source.

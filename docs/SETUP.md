@@ -13,7 +13,7 @@ Internet access is needed to obtain these tools. The checker itself does not upl
 ## 1. Download the checker
 
 1. Open the project's [latest release](https://github.com/SamMcFly/plex-file-check/releases/latest).
-2. Under **Assets**, download **Plex-File-Check-v0.1.0.zip**. Use the attached release ZIP for this guide; GitHub's automatic **Source code** ZIP does not contain the built `.pyz`.
+2. Under **Assets**, download **Plex-File-Check-v0.1.1.zip**. Use the attached release ZIP for this guide; GitHub's automatic **Source code** ZIP does not contain the built `.pyz`.
 3. Extract the ZIP. On Windows, right-click it and select **Extract All**; on macOS, double-click it; on Linux, use your file manager's extract option.
 4. Open the extracted **Plex-File-Check** folder. You should see `plex-file-check.pyz`, `README.md`, and other files. Do not run it inside the ZIP viewer.
 

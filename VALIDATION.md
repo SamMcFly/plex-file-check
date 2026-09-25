@@ -1,4 +1,6 @@
-# Validation of 0.1.0
+# Validation of 0.1.x
+
+Version 0.1.1 updates documentation and the reported version only. The diagnostic implementation and test coverage described below are unchanged from 0.1.0. Its release archive, checksums and portable version command were verified again.
 
 Verified on Windows with Python 3.12 and the installed FFmpeg build reported in each run.
 
