@@ -19,6 +19,9 @@ Start with the exact message you see. Re-running a scan does not alter the media
 | Exit code 1, but no error | It also means warnings or incomplete checks. Look at coverage; deliberately omitted checks can explain it. |
 | No warnings, but Plex still buffers | Check the actual client's selected tracks, delivery path, network and server output. A file scan cannot diagnose all playback causes. |
 | Results differ between machines | Compare tool versions, modes, selected file bytes and optional tools. Decoder/metadata support differs by build. |
+| `DECODE_THREAD_DEPENDENT` | A short sample emitted a recognized decoder message, then decoded without diagnostics with one thread and the same frame count. The original warning remains visible. This is evidence of thread-sensitive behavior, not proof of damaged media or a guarantee of playback. |
+| Embedded subtitles time out | Whole-track extraction may read the entire movie. Increase `--full-timeout` (seconds per track), or use a local copy. The partial result is incomplete, not a bad-subtitle verdict. |
+| A report looks unchanged after replacing a movie | Compare its scan start time, filename, exact byte size and modification time with the file you intended to inspect. Save a new report prefix. These details cannot establish source history or identical content. |
 
 ## Getting help or reporting a false positive
 

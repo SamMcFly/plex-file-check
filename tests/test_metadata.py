@@ -18,6 +18,20 @@ def codes(result):
     return {f["code"] for f in result[0]}
 
 
+def mastering(**changes):
+    result = dict(side_data_type="Mastering display metadata", red_x="34000/50000", red_y="16000/50000",
+                  green_x="13250/50000", green_y="34500/50000", blue_x="7500/50000", blue_y="3000/50000",
+                  white_point_x="15635/50000", white_point_y="16450/50000",
+                  max_luminance="10000000/10000", min_luminance="50/10000")
+    result.update(changes)
+    return result
+
+
+def hdr_probe(records):
+    return probe(color_transfer="smpte2084", color_primaries="bt2020", color_space="bt2020nc",
+                 side_data_list=records)
+
+
 class MetadataTests(unittest.TestCase):
     def test_cover_art_is_not_video(self):
         p = {"streams": [dict(codec_type="video", codec_name="mjpeg", disposition={"attached_pic": 1})]}
@@ -58,6 +72,135 @@ class MetadataTests(unittest.TestCase):
         self.assertIn("hdr_mastering_invalid", codes(result))
         self.assertIn("hdr_light_levels_invalid", codes(result))
         self.assertIn("hdr_mastering_incomplete", codes(result))
+
+    def test_partial_stream_does_not_mask_complete_frame_mastering(self):
+        partial = dict(side_data_type="Mastering display metadata", max_luminance="1000/1", min_luminance="1/200")
+        result = analyze_metadata(hdr_probe([partial]), [dict(stream_index=0, pts_time="2.5", side_data_list=[mastering()])])
+        self.assertNotIn("hdr_mastering_incomplete", codes(result))
+        self.assertNotIn("hdr_mastering_invalid", codes(result))
+        self.assertNotIn("hdr_mastering_conflict", codes(result))
+        metrics = result[1]
+        self.assertEqual(metrics["mastering_record_count"], 2)
+        self.assertEqual(metrics["mastering_selected_record"], 2)
+        self.assertEqual(metrics["mastering_records"][1]["source"]["kind"], "frame")
+        self.assertEqual(metrics["mastering_records"][1]["source"]["pts_seconds"], 2.5)
+        self.assertEqual(metrics["mastering_max_nits"], 1000)
+
+    def test_optional_partial_mastering_is_information_not_invalid(self):
+        partial = dict(side_data_type="Mastering display metadata", max_luminance="1000/1", min_luminance="0/10000")
+        result = analyze_metadata(hdr_probe([partial]))
+        item = next(f for f in result[0] if f["code"] == "hdr_mastering_incomplete")
+        self.assertEqual(item["severity"], "info")
+        self.assertNotIn("hdr_mastering_invalid", codes(result))
+        self.assertEqual(result[1]["mastering_min_nits"], 0)
+        self.assertFalse(result[1]["mastering_records"][0]["complete"])
+
+    def test_extreme_minimum_is_invalid_without_readable_maximum(self):
+        for maximum in ({}, {"max_luminance": "1/0"}):
+            with self.subTest(maximum=maximum):
+                partial = dict(side_data_type="Mastering display metadata", min_luminance="10000000/1", **maximum)
+                result = analyze_metadata(hdr_probe([partial]))
+                item = next(f for f in result[0] if f["code"] == "hdr_mastering_invalid")
+                self.assertIn("min_luminance", item["evidence"]["fields"])
+
+    def test_invalid_stream_mastering_survives_valid_frame(self):
+        partial = dict(side_data_type="Mastering display metadata", max_luminance="10000000/1", min_luminance="1/1")
+        result = analyze_metadata(hdr_probe([partial]), [dict(stream_index=0, side_data_list=[mastering()])])
+        item = next(f for f in result[0] if f["code"] == "hdr_mastering_invalid")
+        self.assertEqual(item["evidence"]["source"]["kind"], "stream")
+        self.assertEqual(item["evidence"]["values"]["max_luminance"], 10000000)
+        self.assertIn("max_luminance", item["evidence"]["fields"])
+        self.assertEqual(result[1]["mastering_max_nits"], 1000)
+        self.assertNotIn("hdr_mastering_incomplete", codes(result))
+        self.assertIn("hdr_mastering_conflict", codes(result))
+
+    def test_conflicting_complete_mastering_records_show_sources(self):
+        result = analyze_metadata(hdr_probe([mastering()]),
+                                  [dict(stream_index=0, side_data_list=[mastering(max_luminance="2000/1")])])
+        item = next(f for f in result[0] if f["code"] == "hdr_mastering_conflict")
+        difference = item["evidence"]["differences"]["max_luminance"]
+        self.assertEqual(difference["minimum"], 1000)
+        self.assertEqual(difference["maximum"], 2000)
+        self.assertEqual(difference["minimum_source"]["kind"], "stream")
+        self.assertEqual(difference["maximum_source"]["kind"], "frame")
+        self.assertNotIn("hdr_mastering_invalid", codes(result))
+        self.assertEqual(result[1]["mastering_max_nits"], 2000)
+
+    def test_equivalent_rationals_and_normal_quantization_do_not_conflict(self):
+        equivalent = mastering(max_luminance="2000/2", min_luminance="1/200", blue_x="15/100")
+        quantized = mastering(max_luminance="1000.0005", min_luminance="0.00505", blue_x="0.15001")
+        result = analyze_metadata(hdr_probe([mastering()]),
+                                  [dict(stream_index=0, side_data_list=[record]) for record in (equivalent, quantized)])
+        self.assertNotIn("hdr_mastering_conflict", codes(result))
+        self.assertNotIn("hdr_mastering_invalid", codes(result))
+        self.assertEqual(result[1]["mastering_conflicts"], {})
+
+    def test_present_unreadable_mastering_fields_are_not_optional_omissions(self):
+        for malformed in (None, "N/A", "nan", "1/0", "not-a-number", True):
+            with self.subTest(value=malformed):
+                result = analyze_metadata(hdr_probe([mastering(red_x=malformed)]),
+                                          [dict(stream_index=0, side_data_list=[mastering()])])
+                item = next(f for f in result[0] if f["code"] == "hdr_mastering_invalid")
+                self.assertIn("red_x", item["evidence"]["unreadable_fields"])
+                self.assertIsNone(item["evidence"]["values"]["red_x"])
+                self.assertNotIn("red_x", result[1]["mastering_records"][0]["missing_fields"])
+                self.assertEqual(result[1]["mastering_selected_record"], 2)
+
+    def test_later_invalid_frame_is_not_hidden_by_first_valid_frame(self):
+        frames = [dict(stream_index=0, side_data_list=[record]) for record in
+                  (mastering(), mastering(red_x="-1/2"), mastering())]
+        result = analyze_metadata(hdr_probe([]), frames)
+        invalid = [f for f in result[0] if f["code"] == "hdr_mastering_invalid"]
+        self.assertEqual(len(invalid), 1)
+        self.assertEqual(invalid[0]["evidence"]["source"]["frame_index"], 1)
+        self.assertIn("red_x", invalid[0]["evidence"]["fields"])
+
+    def test_repeated_equivalent_frames_keep_count_and_provenance(self):
+        frames = [dict(stream_index=0, pts_time="0", side_data_list=[mastering()]),
+                  dict(stream_index=0, pts_time="0.04", side_data_list=[mastering(max_luminance="2000/2")])]
+        original = copy.deepcopy(frames)
+        result = analyze_metadata(hdr_probe([]), frames)
+        self.assertEqual(result[1]["mastering_record_count"], 1)
+        self.assertEqual(result[1]["mastering_observation_count"], 2)
+        record = result[1]["mastering_records"][0]
+        self.assertEqual(record["occurrences"], 2)
+        self.assertEqual(record["source"]["frame_index"], 0)
+        self.assertEqual(record["last_source"]["frame_index"], 1)
+        self.assertEqual(frames, original)
+
+    def test_tolerance_never_hides_invalid_near_boundary_value(self):
+        frames = [dict(stream_index=0, side_data_list=[mastering(max_luminance=value)])
+                  for value in ("10000", "10000.00001")]
+        result = analyze_metadata(hdr_probe([]), frames)
+        self.assertEqual(result[1]["mastering_record_count"], 2)
+        self.assertIn("hdr_mastering_invalid", codes(result))
+        self.assertNotIn("hdr_mastering_conflict", codes(result))
+        self.assertEqual(result[1]["mastering_max_nits"], 10000)
+
+    def test_conflicts_compare_full_range_not_only_adjacent_records(self):
+        frames = [dict(stream_index=0, side_data_list=[mastering(min_luminance=value)])
+                  for value in ("0.005", "0.00509", "0.00518")]
+        result = analyze_metadata(hdr_probe([]), frames)
+        item = next(f for f in result[0] if f["code"] == "hdr_mastering_conflict")
+        self.assertEqual(item["evidence"]["fields"], ["min_luminance"])
+
+    def test_valid_complete_stream_preferred_to_invalid_complete_frame(self):
+        result = analyze_metadata(hdr_probe([mastering()]),
+                                  [dict(stream_index=0, side_data_list=[mastering(max_luminance="10000000/1")])])
+        self.assertEqual(result[1]["mastering_selected_record"], 1)
+        self.assertEqual(result[1]["mastering_max_nits"], 1000)
+        self.assertIn("hdr_mastering_invalid", codes(result))
+
+    def test_partial_records_are_not_combined_into_complete_mastering(self):
+        all_fields = mastering()
+        luminance = {key: value for key, value in all_fields.items() if key in
+                     {"side_data_type", "max_luminance", "min_luminance"}}
+        chromaticity = {key: value for key, value in all_fields.items() if key not in
+                       {"max_luminance", "min_luminance"}}
+        result = analyze_metadata(hdr_probe([luminance]), [dict(stream_index=0, side_data_list=[chromaticity])])
+        self.assertIn("hdr_mastering_incomplete", codes(result))
+        self.assertTrue(all(not record["complete"] for record in result[1]["mastering_records"]))
+        self.assertIsNone(result[1]["mastering_max_nits"])
 
     def test_dv8_hlg_is_not_claimed_hdr10(self):
         result = analyze_metadata(probe(color_transfer="arib-std-b67", side_data_list=[dict(side_data_type="DOVI configuration record", dv_profile=8, dv_bl_signal_compatibility_id=4)]))

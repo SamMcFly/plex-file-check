@@ -32,7 +32,7 @@ def make_parser():
     parser.add_argument("--expected-runtime", type=positive, metavar="SECONDS", help="known runtime; flag files more than 15%% shorter")
     parser.add_argument("--bandwidth-mbps", type=positive, help="optional sustained connection budget to compare with file video bitrate")
     parser.add_argument("--timeout", type=positive, default=120, help="seconds allowed per short tool invocation (default 120)")
-    parser.add_argument("--full-timeout", type=positive, default=7200, help="seconds allowed per full scan (default 7200)")
+    parser.add_argument("--full-timeout", type=positive, default=7200, help="seconds per whole-file operation, including subtitle extraction (default 7200)")
     for tool in ("ffprobe", "ffmpeg", "dovi-tool", "hdr10plus-tool"):
         parser.add_argument("--"+tool, help="explicit path to " + tool)
     parser.add_argument("--report", type=Path, metavar="PREFIX", help="save PREFIX.txt and PREFIX.json; refuses to replace existing files")
@@ -53,9 +53,10 @@ def finalize(report):
             unique.append(item)
     report["findings"] = unique
     counts = Counter(f["severity"] for f in unique)
-    report["counts"] = dict(counts)
+    report["counts"] = {key: counts[key] for key in ("error", "warning", "skipped", "info")}
     report["assessment"] = ("Errors detected; investigate" if counts["error"] else
-                            "Potential playback concerns" if counts["warning"] else
+                            "Warnings need review; file damage is not established" if counts["warning"] else
+                            "No errors or warnings detected; some checks are incomplete" if counts["skipped"] else
                             "No problems detected in completed checks")
     report["exit_code"] = 2 if counts["error"] else 1 if counts["warning"] or counts["skipped"] else 0
     report["interpretation"] = "Advisory file analysis, not Plex certification. Warnings may be heuristics, not confirmed defects. Skipped checks are not passes."
@@ -65,9 +66,19 @@ def finalize(report):
 def text_report(report):
     lines = ["PLEX FILE CHECK " + __version__, "File: " + report["file"],
              "Mode: " + report["mode"], "Assessment: " + report["assessment"], report["interpretation"], ""]
+    counts = report.get("counts", {})
+    lines.append("Summary: {} errors | {} warnings | {} not checked/incomplete | {} informational".format(
+        counts.get("error", 0), counts.get("warning", 0), counts.get("skipped", 0), counts.get("info", 0)))
+    if report.get("generated_utc"):
+        lines.append("Scan started (UTC): " + report["generated_utc"])
     meta = report["metrics"].get("metadata", {})
-    if report["metrics"].get("file_size_bytes"):
-        lines.append("File size: {:.2f} MiB".format(report["metrics"]["file_size_bytes"]/1048576))
+    size = report["metrics"].get("file_size_bytes")
+    if size is not None:
+        lines.append("File size: {:,} bytes ({:.2f} MiB)".format(size, size/1048576))
+    identity = report["metrics"].get("input_identity", {})
+    if identity.get("modified_utc"):
+        lines.append("File modified (UTC): " + identity["modified_utc"])
+        lines.append("Size and modification time help identify a copy; they are not a content hash or source history.")
     if meta.get("video_codec"):
         lines.append("Video: {} | {} x {} | {} | {:.2f} seconds".format(meta["video_codec"],
                      meta.get("width", "?"), meta.get("height", "?"), meta.get("pixel_format", "unknown"),
@@ -78,7 +89,7 @@ def text_report(report):
     if "sampled_video_peak_1s_mbps" in packet:
         lines.append("Sampled video bitrate: average {:.2f} Mbps; one-second peak {:.2f} Mbps".format(
             packet["sampled_video_average_mbps"], packet["sampled_video_peak_1s_mbps"]))
-    for severity, label in (("error", "ERROR"), ("warning", "WARNING"), ("skipped", "NOT CHECKED / INCOMPLETE"), ("info", "INFO")):
+    for severity, label in (("error", "ERROR"), ("warning", "WARNING"), ("skipped", "NOT CHECKED / INCOMPLETE"), ("info", "INFO / CONTEXT (not failures)")):
         items = [f for f in report["findings"] if f["severity"] == severity]
         if items:
             lines += ["", label]

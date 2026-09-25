@@ -11,15 +11,7 @@ from .common import finding, number, duration_of, video_streams
 from .process import probe_json, run_file, run_text
 from .packets import sample_starts, parse_packets, analyze_packets
 from .deep import analyze_full_packets
-
-
-CORRUPTION = re.compile(r"Invalid NAL unit size|Error splitting the input into NAL units|"
-                        r"corrupt(?:ed)? (?:frame|macroblock|packet)|decode_slice_header error|"
-                        r"concealing \d+ errors|Failed to decode (?:picture|frame)|"
-                        r"Error while decoding|Invalid data found|missing picture|"
-                        r"Could not find ref with POC|Invalid NAL unit|Packet corrupt", re.I)
-UNSUPPORTED = re.compile(r"Unknown decoder|Decoder .* not found|Decoding requested, but no decoder|"
-                         r"No such filter|not currently supported|not yet implemented", re.I)
+from .decode import CORRUPTION, UNSUPPORTED, check_decode_result, run_decode_sample
 
 
 def _failure(result):
@@ -28,31 +20,6 @@ def _failure(result):
     if result.get("output_truncated"):
         return "The probe output exceeded the size limit."
     return "The tool failed or did not return usable data (exit {}).".format(result.get("returncode"))
-
-
-def check_decode_result(result, offset=None):
-    text = result.get("stderr", "")
-    counters = re.findall(r"^frame=(\d+)\s*$", result.get("stdout", ""), re.M)
-    frames = int(counters[-1]) if counters else None
-    metric = {"start_seconds": offset, "decoded_video_frames": frames,
-              "exit_code": result["returncode"], "timed_out": result["timed_out"]}
-    if result["timed_out"] or result.get("output_truncated") or UNSUPPORTED.search(text):
-        return [finding("DECODE_INCOMPLETE", "skipped", "Decode check incomplete",
-                        "The run timed out, its progress output was truncated, or FFmpeg lacks a required decoder/filter. This does not establish file corruption.", **metric)], metric
-    matches = CORRUPTION.findall(text)
-    if matches:
-        return [finding("DECODE_ERRORS", "error", "Decoder reported media errors",
-                        "FFmpeg reported structural or decoding errors. Some streams depend on features this decoder may not fully support; verify with a current build and the intended player.",
-                        "Inspect the indicated part of the file or compare another copy before attempting a repair.",
-                        error_types=sorted(set(matches)), **metric)], metric
-    if result["returncode"] or (text.strip() and result.get("stderr_bytes", 0)):
-        return [finding("DECODE_FAILED", "warning", "Decode check did not complete cleanly",
-                        "FFmpeg returned errors that could indicate a media or decoder limitation. No clean decode claim is made.", **metric)], metric
-    if not frames:
-        return [finding("DECODE_EMPTY", "warning", "No video frames decoded",
-                        "The requested region returned no video frames. Check runtime/timestamps and decoder support.", **metric)], metric
-    metric["clean"] = True
-    return [], metric
 
 
 def scan(path, tools, mode="standard", timeout=120, full_timeout=7200,
@@ -76,6 +43,10 @@ def scan(path, tools, mode="standard", timeout=120, full_timeout=7200,
         return result
     before = path.stat()
     metrics["file_size_bytes"] = before.st_size
+    metrics["input_identity"] = {
+        "size_bytes": before.st_size,
+        "modified_utc": datetime.datetime.fromtimestamp(before.st_mtime, datetime.timezone.utc).isoformat(),
+    }
     if not before.st_size:
         findings.append(finding("FILE_EMPTY", "error", "Input file is empty", "There is no media data to inspect."))
         return result
@@ -111,6 +82,7 @@ def scan(path, tools, mode="standard", timeout=120, full_timeout=7200,
     mf, mm = analyze_metadata(probe, frames=frames, reference=reference_probe)
     add(mf, mm, "metadata")
     fmt = probe.get("format", {}).get("format_name", "")
+    progress("Inspecting container layout (many small reads; network storage can be slow)...")
     cf, cm = inspect_container(path, fmt)
     add(cf, cm, "container")
     sf, sm = inspect_sidecars(path)
@@ -159,8 +131,7 @@ def scan(path, tools, mode="standard", timeout=120, full_timeout=7200,
                         "-protocol_whitelist", "file,pipe", "-ss", str(start), "-i", str(path),
                         "-map", "0:"+str(videos[0]["index"]), "-map", "0:a?", "-sn", "-dn", "-t", "2",
                         "-fps_mode", "passthrough", "-enc_time_base:v", "1:1000000", "-progress", "pipe:1", "-nostats", "-f", "null", "-"]
-                ds = run_text(args, timeout)
-                df, dm = check_decode_result(ds, start)
+                df, dm = run_decode_sample(args, timeout, start, progress=progress)
                 add(df)
                 decodes.append(dm)
             metrics["decode_samples"] = decodes
@@ -244,8 +215,8 @@ def scan(path, tools, mode="standard", timeout=120, full_timeout=7200,
                                     "Samples cannot rule out damage elsewhere. Use --deep to scan the full packet timeline and decode every primary-video/audio frame."))
     if tools.get("ffmpeg") and mode != "quick":
         from .extras import scan_embedded_subtitles
-        progress("Checking embedded text subtitles...")
-        ef, em = scan_embedded_subtitles(path, probe, tools["ffmpeg"], timeout=timeout)
+        progress("Checking embedded text subtitles (whole-file reads; limit {} seconds per track)...".format(full_timeout))
+        ef, em = scan_embedded_subtitles(path, probe, tools["ffmpeg"], timeout=full_timeout, progress=progress)
         add(ef, em, "embedded_subtitles")
         coverage.append({"check": "embedded text subtitles", "status": "completed" if em.get("embedded_subtitles", {}).get("complete") else "incomplete"})
     if loudness:

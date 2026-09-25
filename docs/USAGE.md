@@ -63,7 +63,7 @@ Use `--dovi-tool PATH` and `--hdr10plus-tool PATH` for explicit optional-tool lo
 | Option | Default and behavior |
 |---|---|
 | `--timeout SECONDS` | 120 per short tool call, not a limit on the entire scan |
-| `--full-timeout SECONDS` | 7200 per whole-file operation; multiple operations can each use this much time |
+| `--full-timeout SECONDS` | 7200 per whole-file operation, including each embedded text-subtitle extraction even in a standard scan; multiple operations can each use this much time |
 | `--redact-name` | Replace media and matching subtitle names in results; review before sharing |
 | `--quiet` | Hide progress messages, keeping the result |
 | `--json` | Print structured JSON instead of the text report; progress normally goes to stderr |
@@ -72,7 +72,11 @@ Use `--dovi-tool PATH` and `--hdr10plus-tool PATH` for explicit optional-tool lo
 
 Full scans use software decoding and may take longer than playback. Packet scans keep compact timestamp arrays in RAM and spool tool output to temporary disk files. Long/high-frame-rate files, detailed HDR extraction, or very noisy decoder logs can require significant resources. A timeout gives an incomplete result. To allow four hours for each full-file operation, use `--full-timeout 14400`. Press Ctrl+C to cancel.
 
-Report JSON includes measurements, findings with codes and evidence, coverage, and detected tool versions. The schema may evolve while the project is at version 0.x; integrations should record `checker_version` and `schema_version` and tolerate new fields/codes. The report does not deliberately include full input paths, raw logs, command lines, or arbitrary title tags.
+Embedded text-subtitle extraction may need to read the whole media file. Large files on network storage can take several minutes even though no video is being converted. If it times out, increase `--full-timeout` or inspect a local copy; a partial extracted subtitle is never counted as a pass.
+
+Short decode samples with an isolated `PPS changed between slices` diagnostic receive one controlled retry using one decoder thread. The report retains the initial diagnostic and both frame counts. A clean retry with the same count is reported as `DECODE_THREAD_DEPENDENT`, still a warning. Different counts, additional errors and failed retries are not excused. Whole-file decode is not automatically repeated. Each attempt has its own short-command timeout.
+
+Report JSON includes measurements, findings with codes and evidence, coverage, and detected tool versions. Summary counts explicitly include zero values. The text report also shows the scan start time, exact file size and file modification time. These help identify a copy but are not a fingerprint or proof of its source. The schema may evolve while the project is at version 0.x; integrations should record `checker_version` and `schema_version` and tolerate new fields/codes. The report does not deliberately include full input paths, raw logs, command lines, or arbitrary title tags. Recognized decoder messages are represented by fixed diagnostic labels; unknown diagnostic text is not copied into reports.
 
 ## Exit codes for scripts
 

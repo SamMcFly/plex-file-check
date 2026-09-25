@@ -3,6 +3,7 @@
 Absent metadata is different from invalid metadata. Compatibility notes describe
 possible client requirements, never guarantee a Plex client will or will not play.
 """
+import math
 import re
 
 from .common import number, finding, video_streams, duration_of
@@ -13,6 +14,14 @@ _HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
 _BITMAP_SUBS = {"hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub"}
 _TEXT_SUBS = {"subrip", "srt", "ass", "ssa", "webvtt", "mov_text", "text",
               "ttml", "microdvd", "sami", "realtext", "subviewer", "subviewer1"}
+_MASTERING_FIELDS = ("red_x", "red_y", "green_x", "green_y", "blue_x", "blue_y",
+                     "white_point_x", "white_point_y", "max_luminance", "min_luminance")
+# One unit of HEVC mastering metadata quantization, plus a small allowance for
+# floating container representations. These are comparison tolerances, not
+# permission to ignore a malformed or out-of-range value in an individual record.
+_MASTERING_REL_TOLERANCE = 1e-6
+_MASTERING_XY_TOLERANCE = 2e-5
+_MASTERING_NITS_TOLERANCE = 1e-4
 
 
 def _text(value):
@@ -73,16 +82,122 @@ def _color_class(stream):
     return definite, candidate, depth
 
 
-def _side_data(stream, frames):
-    records = list(stream.get("side_data_list") or [])
+def _side_data_with_sources(stream, frames):
+    """Retain probe location; stream/frame does not prove container/SEI origin."""
+    records = [(record, {"kind": "stream", "side_data_index": position})
+               for position, record in enumerate(stream.get("side_data_list") or [])
+               if isinstance(record, dict)]
     index = stream.get("index")
-    for frame in frames or []:
+    for frame_index, frame in enumerate(frames or []):
         if not isinstance(frame, dict) or frame.get("media_type", "video") != "video":
             continue
         if index is not None and frame.get("stream_index") is not None and frame["stream_index"] != index:
             continue
-        records.extend(frame.get("side_data_list") or [])
-    return [x for x in records if isinstance(x, dict)]
+        for position, record in enumerate(frame.get("side_data_list") or []):
+            if isinstance(record, dict):
+                source = {"kind": "frame", "frame_index": frame_index, "side_data_index": position}
+                timestamp = number(frame.get("pts_time"))
+                if timestamp is not None:
+                    source["pts_seconds"] = timestamp
+                records.append((record, source))
+    return records
+
+
+def _mastering_checks(entries, index, findings, metrics):
+    """Check each distinct record; never merge partial records into a full one.
+
+    Legacy max/min metrics describe one selected record, not every observation.
+    Prefer a complete record with consistent numeric values, with frames winning
+    ties. Otherwise choose the most numeric fields, then consistent values, then
+    a frame. The selected record ID and all other records remain in metrics.
+    """
+    if not entries:
+        return
+    records, seen = [], {}
+    for raw, source in entries:
+        values = {key: number(raw[key]) for key in _MASTERING_FIELDS if key in raw}
+        missing = [key for key in _MASTERING_FIELDS if key not in raw]
+        unreadable = [key for key, value in values.items() if value is None]
+        bad = list(unreadable)
+        for key, value in values.items():
+            if value is not None and key not in {"max_luminance", "min_luminance"} and not 0 <= value <= 1:
+                bad.append(key)
+        for prefix in ("red", "green", "blue", "white_point"):
+            x, y = values.get(prefix + "_x"), values.get(prefix + "_y")
+            if x is not None and y is not None and x + y > 1.00001:
+                bad.append(prefix + "_xy_sum")
+        maximum, minimum = values.get("max_luminance"), values.get("min_luminance")
+        if maximum is not None and not 0 < maximum <= 10000:
+            bad.append("max_luminance")
+        if minimum is not None and (not 0 <= minimum <= 10000 or (maximum is not None and minimum > maximum)):
+            bad.append("min_luminance")
+
+        # Validate before deduplication. Equivalent rationals normalize exactly;
+        # tolerances are deliberately reserved for comparisons below so they can
+        # never conceal an invalid value near a range boundary.
+        signature = (source["kind"], tuple((key in raw, values.get(key)) for key in _MASTERING_FIELDS),
+                     tuple(sorted(set(bad))))
+        if signature in seen:
+            entry = records[seen[signature]]
+            entry["occurrences"] += 1
+            entry["last_source"] = source
+            continue
+        seen[signature] = len(records)
+        records.append(dict(record=len(records) + 1, source=source, occurrences=1,
+                            values=values, missing_fields=missing, unreadable_fields=unreadable,
+                            invalid_fields=sorted(set(bad)), complete=not missing and not unreadable))
+
+    def preference(record):
+        numeric_count = sum(value is not None for value in record["values"].values())
+        consistent = not record["invalid_fields"]
+        return (record["complete"] and consistent, numeric_count, consistent,
+                record["source"]["kind"] == "frame")
+
+    selected = max(records, key=preference)
+    metrics.update(mastering_records=records, mastering_record_count=len(records),
+                   mastering_observation_count=sum(record["occurrences"] for record in records),
+                   mastering_selected_record=selected["record"],
+                   mastering_selection_policy="Prefer complete consistent records and frame provenance; otherwise prefer more numeric fields, then consistent values, then frame provenance. No fields are merged across records.",
+                   mastering_max_nits=selected["values"].get("max_luminance"),
+                   mastering_min_nits=selected["values"].get("min_luminance"))
+    for record in records:
+        if record["invalid_fields"]:
+            findings.append(finding("hdr_mastering_invalid", "warning", "HDR mastering values need review",
+                                    "A reported value is unreadable, outside the checker's expected HDR range, or inconsistent with another value in the same record. Other valid records do not resolve this observation.",
+                                    "Compare the reported stream and frame metadata before changing the file.",
+                                    stream=index, record=record["record"], source=record["source"],
+                                    fields=record["invalid_fields"], unreadable_fields=record["unreadable_fields"],
+                                    values=record["values"]))
+    if not any(record["complete"] for record in records):
+        findings.append(finding("hdr_mastering_incomplete", "info", "Only partial HDR mastering records were observed",
+                                "No single supplied record contains every numeric mastering field. Stream and frame records may omit optional fields; this alone does not establish malformed metadata or an HDR playback problem.",
+                                stream=index, records=[dict(record=record["record"], source=record["source"],
+                                                           missing_fields=record["missing_fields"],
+                                                           unreadable_fields=record["unreadable_fields"])
+                                                       for record in records]))
+
+    conflicts = {}
+    for key in _MASTERING_FIELDS:
+        comparable = [(record["values"][key], record) for record in records
+                      if record["values"].get(key) is not None]
+        if len(comparable) < 2:
+            continue
+        low, low_record = min(comparable, key=lambda pair: pair[0])
+        high, high_record = max(comparable, key=lambda pair: pair[0])
+        tolerance = _MASTERING_NITS_TOLERANCE if "luminance" in key else _MASTERING_XY_TOLERANCE
+        if not math.isclose(low, high, rel_tol=_MASTERING_REL_TOLERANCE, abs_tol=tolerance):
+            conflicts[key] = dict(minimum=low, maximum=high,
+                                  minimum_record=low_record["record"], maximum_record=high_record["record"],
+                                  minimum_source=low_record["source"], maximum_source=high_record["source"])
+    metrics["mastering_conflicts"] = conflicts
+    if conflicts:
+        findings.append(finding("hdr_mastering_conflict", "warning", "HDR mastering records disagree",
+                                "Comparable numeric fields differ across supplied stream or frame records beyond the comparison tolerance. This can reflect conflicting signaling or changes within the sample; it does not by itself establish corrupted video.",
+                                "Review the source-specific records and intended playback before changing metadata.",
+                                stream=index, fields=sorted(conflicts), differences=conflicts,
+                                relative_tolerance=_MASTERING_REL_TOLERANCE,
+                                chromaticity_absolute_tolerance=_MASTERING_XY_TOLERANCE,
+                                luminance_absolute_tolerance_nits=_MASTERING_NITS_TOLERANCE))
 
 
 def _hdr_checks(stream, frames, findings, metrics):
@@ -91,7 +206,8 @@ def _hdr_checks(stream, frames, findings, metrics):
     transfer = _text(stream.get("color_transfer"))
     primaries = _text(stream.get("color_primaries"))
     matrix = _text(stream.get("color_space"))
-    records = _side_data(stream, frames)
+    entries = _side_data_with_sources(stream, frames)
+    records = [record for record, source in entries]
     dovi = [s for s in records if "dovi configuration" in _text(s.get("side_data_type"))]
     dv_frames = [s for s in records if "dolby vision" in _text(s.get("side_data_type"))]
     masters = [s for s in records if "mastering display" in _text(s.get("side_data_type"))]
@@ -135,36 +251,8 @@ def _hdr_checks(stream, frames, findings, metrics):
                                 "HDR static side data is present but the video does not explicitly declare PQ or HLG. The side data may be stale or the transfer tag may be missing.",
                                 stream=index, transfer=transfer or None))
 
-    # Validate physical values as rationals, including a legitimate zero black level.
-    for record in masters[:1]:
-        maximum = number(record.get("max_luminance"))
-        minimum = number(record.get("min_luminance"))
-        metrics["mastering_max_nits"] = maximum
-        metrics["mastering_min_nits"] = minimum
-        bad = []
-        missing = []
-        for key in ("red_x", "red_y", "green_x", "green_y", "blue_x", "blue_y", "white_point_x", "white_point_y",
-                    "max_luminance", "min_luminance"):
-            val = number(record.get(key))
-            if val is None:
-                missing.append(key)
-            elif key not in {"max_luminance", "min_luminance"} and not 0 <= val <= 1:
-                bad.append(key)
-        for prefix in ("red", "green", "blue", "white_point"):
-            x, y = number(record.get(prefix + "_x")), number(record.get(prefix + "_y"))
-            if x is not None and y is not None and x + y > 1.00001:
-                bad.append(prefix + "_xy_sum")
-        if maximum is not None and not 0 < maximum <= 10000:
-            bad.append("max_luminance")
-        if minimum is not None and (minimum < 0 or (maximum is not None and minimum > maximum)):
-            bad.append("min_luminance")
-        if bad:
-            findings.append(finding("hdr_mastering_invalid", "warning", "HDR mastering values are inconsistent",
-                                    "One or more mastering-display values fall outside physical bounds or contradict each other.",
-                                    stream=index, fields=sorted(set(bad))))
-        if missing:
-            findings.append(finding("hdr_mastering_incomplete", "warning", "HDR mastering record is incomplete",
-                                    "A mastering-display record exists but some fields could not be read.", stream=index, fields=missing))
+    _mastering_checks([(record, source) for record, source in entries
+                       if "mastering display" in _text(record.get("side_data_type"))], index, findings, metrics)
     for record in lights[:1]:
         cll = number(record.get("max_content", record.get("max_content_light_level")))
         fall = number(record.get("max_average", record.get("max_pic_average_light_level")))

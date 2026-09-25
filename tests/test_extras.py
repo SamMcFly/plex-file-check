@@ -105,6 +105,19 @@ class ExtrasTests(unittest.TestCase):
         self.assertFalse(metrics["embedded_subtitles"]["complete"])
         self.assertEqual(findings[0]["code"], "subtitle.extraction_incomplete")
 
+    def test_subtitle_timeout_keeps_partial_text_incomplete_and_reports_limit(self):
+        def run(args, **kwargs):
+            self.assertEqual(kwargs["timeout"], 456)
+            Path(args[-1]).write_text("1\n00:00:00,000 --> 00:00:01,000\nHi\n", encoding="utf-8")
+            return result(returncode=1, timed_out=True)
+        with patch("plexcheck.extras.run_text", side_effect=run):
+            findings, metrics = scan_embedded_subtitles("source.mkv", subtitle_probe(), "ffmpeg", timeout=456)
+        self.assertFalse(metrics["embedded_subtitles"]["complete"])
+        self.assertEqual(metrics["embedded_subtitles"]["timeout_seconds_per_track"], 456)
+        self.assertEqual(findings[0]["evidence"]["timeout_seconds"], 456)
+        self.assertIn("--full-timeout", findings[0]["advice"])
+        self.assertNotIn("cue_count", metrics["embedded_subtitles"]["tracks"][0])
+
     def test_success_with_errors_has_no_clean_claim(self):
         def run(args, **kwargs):
             Path(args[-1]).write_text("1\n00:00:00,000 --> 00:00:01,000\nHi\n", encoding="utf-8")

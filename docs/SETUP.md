@@ -13,7 +13,7 @@ Internet access is needed to obtain these tools. The checker itself does not upl
 ## 1. Download the checker
 
 1. Open the project's [latest release](https://github.com/SamMcFly/plex-file-check/releases/latest).
-2. Under **Assets**, download **Plex-File-Check-v0.1.1.zip**. Use the attached release ZIP for this guide; GitHub's automatic **Source code** ZIP does not contain the built `.pyz`.
+2. Under **Assets**, download **Plex-File-Check-v0.1.2.zip**. Use the attached release ZIP for this guide; GitHub's automatic **Source code** ZIP does not contain the built `.pyz`.
 3. Extract the ZIP. On Windows, right-click it and select **Extract All**; on macOS, double-click it; on Linux, use your file manager's extract option.
 4. Open the extracted **Plex-File-Check** folder. You should see `plex-file-check.pyz`, `README.md`, and other files. Do not run it inside the ZIP viewer.
 
@@ -134,10 +134,19 @@ python3 plex-file-check.pyz "/home/yourname/Videos/Example.mkv" --redact-name --
 
 When the prompt returns, open **first-check.txt** in the checker folder with any text editor. **first-check.json** contains detail useful to someone helping you. A normal scan takes seconds to minutes, depending on the file and storage. Press **Ctrl+C** to cancel; the movie is not changed.
 
-Start with **ERROR** and **WARNING** explanations, then **COVERAGE**. **NOT CHECKED / INCOMPLETE** is expected for work you did not request. A warning alone is not a reason to re-encode a working movie. Read [findings and limitations](FINDINGS_AND_LIMITS.md) before acting.
+Check the filename, exact size and modification time first, especially if you replaced a movie or ran a conversion. Then read the summary counts, **ERROR** and **WARNING** explanations, and **COVERAGE**. **NOT CHECKED / INCOMPLETE** is expected for work you did not request. A warning alone is not a reason to re-encode a working movie. Read [findings and limitations](FINDINGS_AND_LIMITS.md) before acting.
 
 For a second run, use `--report second-check` or another unused name. To inspect the full file, add `--deep`; this can take hours and use substantial CPU and temporary disk space. You do not need optional Dolby Vision or HDR10+ tools for your first scan.
 
 Review reports before posting them. `--redact-name` hides input and matching subtitle names; it cannot promise removal of every possible sensitive detail. Do not post Plex tokens, private logs, or movie files with a public issue.
 
 For **command not found**, **can't open file**, or **FFprobe was not found**, see [Troubleshooting](TROUBLESHOOTING.md). For every option, see [Usage](USAGE.md). To uninstall the checker, delete its extracted folder and unwanted reports; Python and FFmpeg are separate installations.
+
+## 6. Update an existing installation
+
+1. Download the latest release ZIP and extract it into a new folder. Keep your previous reports if you want to compare results.
+2. If you kept FFmpeg and optional tools in the old checker's `tools` folder, copy that folder into the new **Plex-File-Check** folder. Tools already on PATH can stay where they are. You do not need to reinstall working Python or FFmpeg for every checker update.
+3. Open a terminal in the new folder using the instructions for your operating system above. Run `py -3 plex-file-check.pyz --version` on Windows, or `python3 plex-file-check.pyz --version` on macOS/Linux. This release should print **Plex File Check 0.1.2**.
+4. Run a scan and choose a new report prefix, such as `--report updated-check`. Old reports retain the results and checker version from when they were created.
+
+If you only use the single-file `plex-file-check.pyz`, you can instead replace that file with the new download and keep your tools beside it. If you run the source entry point `plex_check.py`, update the entire source package, including the `plexcheck` folder; replacing only the `.pyz` does not update the source entry point.

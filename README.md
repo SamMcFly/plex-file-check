@@ -10,7 +10,7 @@ An unofficial community project; not affiliated with or endorsed by Plex. Design
 
 **New to scripts? Follow the [step-by-step setup guide](docs/SETUP.md).** It explains what to download, how to open a terminal, and exactly what to type on each operating system. No coding knowledge, Git, or Python packages from pip are needed.
 
-You need Python 3.9 or newer (a currently supported version is recommended), plus a recent FFmpeg installation that includes ffprobe. Download **Plex-File-Check-v0.1.1.zip** from [Releases](https://github.com/SamMcFly/plex-file-check/releases/latest), extract it, and open a terminal in the extracted `Plex-File-Check` folder.
+You need Python 3.9 or newer (a currently supported version is recommended), plus a recent FFmpeg installation that includes ffprobe. Download **Plex-File-Check-v0.1.2.zip** from [Releases](https://github.com/SamMcFly/plex-file-check/releases/latest), extract it, and open a terminal in the extracted `Plex-File-Check` folder.
 
 Windows:
 
@@ -53,7 +53,7 @@ Deep mode does not automatically enable the separate `--loudness`, `--dovi`, or 
 | **INFO** | Context, compatibility information, or a preference; usually no action is required. |
 | **NOT CHECKED / INCOMPLETE** | No usable conclusion. The check may be optional, unavailable, timed out, or inconclusive. This is not a pass. |
 
-Start with the finding's explanation and suggested next step, then the **COVERAGE** section. A normal scan can exit with code 1 simply because it leaves some checks incomplete; that does not mean the program crashed. [The usage guide](docs/USAGE.md) explains every option and exit code.
+Start with the summary counts, then the finding's explanation and suggested next step, and the **COVERAGE** section. Informational entries are not failures. The report shows its scan time, exact file size and file modification time to help distinguish copies; these are not a content hash or proof of the file's origin. A normal scan can exit with code 1 simply because it leaves some checks incomplete; that does not mean the program crashed. [The usage guide](docs/USAGE.md) explains every option and exit code.
 
 ## What this can and cannot tell you
 

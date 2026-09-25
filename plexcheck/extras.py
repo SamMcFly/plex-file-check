@@ -153,7 +153,7 @@ def scan_loudness(path, probe, ffmpeg, timeout=7200, progress=lambda text: None)
     return findings, metrics
 
 
-def scan_embedded_subtitles(path, probe, ffmpeg, timeout=120, progress=lambda text: None):
+def scan_embedded_subtitles(path, probe, ffmpeg, timeout=7200, progress=lambda text: None):
     """Extract supported text subtitles to private temporary SRTs and inspect.
 
     Bitmap subtitle OCR is not attempted. FFmpeg text conversion may remove
@@ -162,7 +162,7 @@ def scan_embedded_subtitles(path, probe, ffmpeg, timeout=120, progress=lambda te
     from .containers import validate_srt, MAX_SRT_BYTES
     findings, tracks = [], []
     subtitles = _streams(probe, "subtitle")
-    metrics = {"embedded_subtitles": {"complete": False, "tracks": tracks,
+    metrics = {"embedded_subtitles": {"complete": False, "tracks": tracks, "timeout_seconds_per_track": timeout,
                                       "conversion_preservation_checked": False}}
     if not subtitles:
         metrics["embedded_subtitles"].update(complete=True, applicable=False)
@@ -198,7 +198,12 @@ def scan_embedded_subtitles(path, probe, ffmpeg, timeout=120, progress=lambda te
                         "-avoid_negative_ts", "disabled", "-fs", str(MAX_SRT_BYTES + 1), "-f", "srt", str(output)]
                 result = run_text(args, timeout=timeout)
                 if result.get("timed_out") or result.get("returncode") or result.get("output_truncated"):
-                    findings.append(_incomplete("subtitle.extraction_incomplete", "Embedded subtitle extraction incomplete", index, result))
+                    note = _incomplete("subtitle.extraction_incomplete", "Embedded subtitle extraction incomplete", index, result)
+                    note["evidence"]["timeout_seconds"] = timeout
+                    if result.get("timed_out"):
+                        note["detail"] = "Whole-track subtitle extraction exceeded its time limit. It may need to read the entire media file, especially on network storage. This does not establish damaged subtitles."
+                        note["advice"] = "Increase --full-timeout for a longer per-track limit, or inspect a local copy."
+                    findings.append(note)
                     continue
                 if not output.is_file():
                     findings.append(_incomplete("subtitle.output_missing", "No extracted subtitle was produced", index, result))
