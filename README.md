@@ -1,76 +1,72 @@
 # Plex File Check
 
-Check a local movie or episode for file errors and possible playback concerns, then save a report you can share. The checker reads your file without changing it. It works independently of Plex and needs no Plex account.
+Check a movie or episode for file errors, suspicious HDR signaling, and formats that need particular playback support. The default scan gives a short report with the findings most worth investigating.
 
-**A warning is a clue to investigate, not proof that your file is broken or that it causes Plex buffering.** Some checks measure errors; others use thresholds from the author's own conversion workflow. Those thresholds have not been established as universal Plex requirements. Read [what the findings actually mean](docs/FINDINGS_AND_LIMITS.md) before deciding to change a file.
+The checker reads your file without changing it. It needs no Plex account and does not upload media. It is an unofficial community project, designed for Windows, macOS, and Linux. See [validation status](VALIDATION.md) for what has actually been tested.
 
-An unofficial community project; not affiliated with or endorsed by Plex. Designed for Windows, macOS, and Linux. See [validation and platform status](VALIDATION.md) for what has actually been tested.
+## Start here
 
-## Get started
+**New to scripts? Follow the [step-by-step setup guide](docs/SETUP.md).** You need Python 3.9 or newer and FFmpeg with ffprobe. No coding knowledge or Python packages from pip are needed.
 
-**New to scripts? Follow the [step-by-step setup guide](docs/SETUP.md).** It explains what to download, how to open a terminal, and exactly what to type on each operating system. No coding knowledge, Git, or Python packages from pip are needed.
+Download **Plex-File-Check-v0.2.0.zip** from [Releases](https://github.com/SamMcFly/plex-file-check/releases/latest), extract it, and open a terminal in the extracted `Plex-File-Check` folder.
 
-You need Python 3.9 or newer (a currently supported version is recommended), plus a recent FFmpeg installation that includes ffprobe. Download **Plex-File-Check-v0.1.2.zip** from [Releases](https://github.com/SamMcFly/plex-file-check/releases/latest), extract it, and open a terminal in the extracted `Plex-File-Check` folder.
-
-Windows:
+On Windows:
 
 ```powershell
 py -3 plex-file-check.pyz "D:\Movies\Example.mkv" --redact-name --report first-check
 ```
 
-macOS:
+On macOS or Linux:
 
 ```sh
-python3 plex-file-check.pyz "/Users/yourname/Movies/Example.mkv" --redact-name --report first-check
+python3 plex-file-check.pyz "/path/to/Example.mkv" --redact-name --report first-check
 ```
 
-Linux:
+Replace the quoted path with your own movie's path. Open **first-check.txt** when the scan finishes. **first-check.json** contains the technical details if someone needs to help you. Use a new report name for each run; existing reports are never overwritten.
 
-```sh
-python3 plex-file-check.pyz "/home/yourname/Videos/Example.mkv" --redact-name --report first-check
-```
+If you downloaded **Code → Download ZIP**, use `plex_check.py` instead of `plex-file-check.pyz` and keep the `plexcheck` folder beside it.
 
-Replace the quoted example path with your own file's path. The command saves **first-check.txt** (open this to read the results) and **first-check.json** (more detail for troubleshooting) in the current folder. Use a different report name for your next scan; existing reports are never overwritten. The `.pyz` is the complete checker in one file, but still needs Python and FFmpeg installed.
+## Read the result
 
-If you downloaded GitHub's **Code → Download ZIP** instead of the release, use `plex_check.py` in place of `plex-file-check.pyz` and keep the `plexcheck` folder beside it.
+The normal report shows only relevant groups:
 
-## Choose a scan
-
-| Choice | What it does | When to use it |
-|---|---|---|
-| `--quick` | Reads track information, container layout, and matching external SRT subtitles | First look; often seconds |
-| No mode option | Adds short packet, decode, image-pattern and embedded text-subtitle checks | Recommended starting scan; seconds to minutes |
-| `--deep` | Also reads the full packet timeline and decodes the primary video and all audio | Investigate damage missed by samples; may take hours |
-
-Deep mode does not automatically enable the separate `--loudness`, `--dovi`, or `--hdr10plus` checks. Short scans can miss problems elsewhere in a file. A completed software decode does not guarantee playback on every device.
-
-## Understand the report
-
-| Label | Meaning |
+| Group | What it means |
 |---|---|
-| **ERROR** | A concrete read, structure, or decode problem was reported. Investigate the evidence; it does not automatically prove a Plex defect. |
-| **WARNING** | A possible concern, inconsistent measurement, or heuristic threshold needs attention. It may be harmless for your setup. |
-| **INFO** | Context, compatibility information, or a preference; usually no action is required. |
-| **NOT CHECKED / INCOMPLETE** | No usable conclusion. The check may be optional, unavailable, timed out, or inconclusive. This is not a pass. |
+| **FILE ERRORS** | The file could not be read or decoded cleanly. Investigate these first; tool limitations can also cause failures. |
+| **REVIEW** | A strong clue needs checking, such as conflicting HDR metadata or suspicious timing. It is not a confirmed explanation for your playback symptom. |
+| **DEVICE SUPPORT** | A format may need a compatible player or Plex conversion. This does not mean the file is broken. |
+| **INCOMPLETE** | A requested check could not finish, for example because of a timeout or missing tool. |
 
-Start with the summary counts, then the finding's explanation and suggested next step, and the **COVERAGE** section. Informational entries are not failures. The report shows its scan time, exact file size and file modification time to help distinguish copies; these are not a content hash or proof of the file's origin. A normal scan can exit with code 1 simply because it leaves some checks incomplete; that does not mean the program crashed. [The usage guide](docs/USAGE.md) explains every option and exit code.
+Optional checks you did not request do not create an incomplete warning. A clean sampled result means **no major issue was found in the checks performed**; it does not certify every byte or every Plex device.
 
-## What this can and cannot tell you
+## Pick a scan
 
-It can examine timestamps, bitrate bursts, stream metadata, subtitle structure, decode errors, HDR signaling, and other properties of a local file. It cannot establish the cause of buffering from a file alone. Device capabilities, selected tracks, network conditions, and the server's actual output also matter.
+| Command option | What runs |
+|---|---|
+| No mode option | **Recommended:** file/track metadata, basic container structure, HDR checks, and short video/audio decode samples |
+| `--quick` | Metadata and basic container structure; no video/audio decode test |
+| `--deep` | Also checks the full audio/video packet timelines and decodes the primary video and all audio; may take hours |
 
-The author's reported **HEVC/QSV transcoding bitrate overshoot** is documented separately in [findings and limitations](docs/FINDINGS_AND_LIMITS.md#the-authors-hevcqsv-observation). Scanning an HEVC source does not establish that it has that server-side issue.
+Start with the default. If playback still fails or you suspect damage outside the samples, run again with `--deep` and a new report name.
 
-The checker does not convert, repair, remux, rename, delete, or upload media. Temporary subtitle/HDR data is cleaned up. Reports hide the media name when `--redact-name` is used; still review a report before posting it. No third-party tool binaries or media are bundled.
+For help with one finding, add **`--details`** to show its evidence and the coverage information. For the old, broader conversion-style diagnostics, use **`--advanced`**. This adds checks such as bitrate heuristics, image-pattern analysis, and subtitle extraction, with a detailed report that also includes layout/index observations. Those extra rules are not universal Plex requirements. See [Usage](docs/USAGE.md).
 
-## More help
+## What this can tell you
+
+An unreadable file or repeatable decoder failure is useful evidence. Device-support notes focus on Dolby Vision Profile 5, less common AVC/HEVC bit-depth or color-sampling formats, and image-based subtitles. Compare them with the actual player's support and selected tracks. **No format is declared broken simply because some devices cannot play it directly.**
+
+The author's conversion-workflow observations are documented separately in [findings and limitations](docs/FINDINGS_AND_LIMITS.md), including rules whose connection to playback remains unproven. A file scan cannot establish the author's reported Plex HEVC/QSV transcode bitrate problem or diagnose every cause of buffering.
+
+The checker does not convert, repair, rename, delete, or upload your media. Review reports before sharing them, even with `--redact-name`. No third-party tool binaries or media are bundled.
+
+## Help
 
 - [Setup for Windows, macOS, and Linux](docs/SETUP.md)
-- [Usage, optional checks, and advanced options](docs/USAGE.md)
-- [Measured findings, author observations, and unconfirmed assumptions](docs/FINDINGS_AND_LIMITS.md)
-- [Troubleshooting and glossary](docs/TROUBLESHOOTING.md)
-- [Technical check inventory and thresholds](CHECKS.md)
-- [Test coverage and known validation gaps](VALIDATION.md)
-- [Contributing and building a release](CONTRIBUTING.md)
+- [Usage and optional diagnostics](docs/USAGE.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [What the findings do and do not prove](docs/FINDINGS_AND_LIMITS.md)
+- [Technical inventory and advanced thresholds](CHECKS.md)
+- [Tests and validation gaps](VALIDATION.md)
+- [Contributing](CONTRIBUTING.md)
 
-Licensed under the [MIT license](LICENSE). To report a suspected checker problem or false positive, use [GitHub Issues](https://github.com/SamMcFly/plex-file-check/issues) with a reviewed, redacted report and the steps to reproduce it.
+Licensed under [MIT](LICENSE). Report suspected checker bugs or false positives in [GitHub Issues](https://github.com/SamMcFly/plex-file-check/issues) with a reviewed, redacted report.

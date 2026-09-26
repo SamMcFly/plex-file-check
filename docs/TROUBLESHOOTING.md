@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with the exact message you see. Re-running a scan does not alter the media. Use a new `--report` name when a previous report already exists.
+Start with the main result and any **FILE ERRORS** or **REVIEW** findings. Add `--details` if you need finding codes and evidence. Re-running a scan does not alter the media; use a new `--report` name.
 
 | Symptom | What to do |
 |---|---|
@@ -15,13 +15,15 @@ Start with the exact message you see. Re-running a scan does not alter the media
 | A report with that name already exists | Change `--report first-check` to `--report second-check`. The checker intentionally refuses to replace reports. |
 | Unable to run/save, exit code 3 | Check tool paths, input/report permissions and free temporary/report disk space. Try a writable report folder. |
 | Scan is slow or appears idle | Deep decode, loudness and HDR extraction may take a long time, particularly on network storage. Per-operation timeouts are not a total scan timer. Ctrl+C cancels without editing media. |
-| Warnings on a file that plays correctly | That can be a false positive, a harmless property, or a client-dependent concern. Read [findings and limitations](FINDINGS_AND_LIMITS.md); do not convert solely to remove warnings. |
-| Exit code 1, but no error | It also means warnings or incomplete checks. Look at coverage; deliberately omitted checks can explain it. |
+| A DEVICE SUPPORT note on a file that plays correctly | This is expected when your player supports that format. It is not a file error and does not make the scan fail. |
+| Review findings on a file that plays correctly | A clue can have harmless explanations. Read [findings and limitations](FINDINGS_AND_LIMITS.md); do not convert solely to clear a report. Advanced mode also shows less certain heuristic warnings. |
+| Exit code 1, but no error | It means review is needed or a requested check was incomplete. Optional work you did not request does not cause it. Advanced mode includes its broader warnings. |
 | No warnings, but Plex still buffers | Check the actual client's selected tracks, delivery path, network and server output. A file scan cannot diagnose all playback causes. |
 | Results differ between machines | Compare tool versions, modes, selected file bytes and optional tools. Decoder/metadata support differs by build. |
-| `DECODE_THREAD_DEPENDENT` | A short sample emitted a recognized decoder message, then decoded without diagnostics with one thread and the same frame count. The original warning remains visible. This is evidence of thread-sensitive behavior, not proof of damaged media or a guarantee of playback. |
-| Embedded subtitles time out | Whole-track extraction may read the entire movie. Increase `--full-timeout` (seconds per track), or use a local copy. The partial result is incomplete, not a bad-subtitle verdict. |
-| A report looks unchanged after replacing a movie | Compare its scan start time, filename, exact byte size and modification time with the file you intended to inspect. Save a new report prefix. These details cannot establish source history or identical content. |
+| `DECODE_THREAD_DEPENDENT` in additional diagnostics | A short sample reported only the PPS-change diagnostic, then decoded cleanly with one thread and the same positive frame count. This is weaker evidence than a repeatable failure, so it is not a major focused finding. Both attempts remain in JSON and detailed output. |
+| Embedded subtitles time out during an advanced scan | Whole-track extraction may read the entire movie. Increase `--full-timeout` (seconds per track), or use a local copy. The partial result is incomplete, not a bad-subtitle verdict. |
+| The report is much shorter after upgrading | Version 0.2.0 focuses on major issues and useful clues. Use `--details` for existing evidence and extra observations, or `--advanced` to run the broader old diagnostic set. |
+| A report looks unchanged after replacing a movie | Use `--details` or open the JSON to compare scan time, filename, exact byte size and modification time with the intended file. Save a new report prefix. These details cannot establish source history or identical content. |
 
 ## Getting help or reporting a false positive
 

@@ -1,57 +1,55 @@
-# Findings, observations, and limitations
+# What the results mean
 
-This project grew out of one person's Plex troubleshooting and conversion workflow. It combines measurable file checks with practical rules that helped guide that workflow. **Those rules are not an official Plex specification, and some may never turn out to predict playback trouble.** The project welcomes evidence that a warning is unnecessary or misleading.
+The default checker focuses on file errors and useful compatibility clues. It is not a guarantee of playback on every device, and a finding does not by itself explain a particular buffering event.
 
-The original conversion script also contains personal choices about tracks, loudness, encoding and appearance. Those choices do not become universal requirements just because a script checks them. See [the check inventory](../CHECKS.md) for what was adapted and what was deliberately excluded.
+## The four result groups
 
-## Severity is not certainty
-
-The report's ERROR, WARNING and INFO labels indicate how much attention a finding deserves. They are **not confidence scores**, and there is no separate machine-readable confidence classification in version 0.1.x. Read the finding's detail, evidence, next step, and coverage together.
-
-| Kind of finding | What was actually established | What was not established |
+| Group | Examples | How to use it |
 |---|---|---|
-| Empty/unreadable file or invalid container boundaries | The input could not be read normally or its inspected structure is inconsistent | Why it became that way, or whether Plex caused it |
-| FFmpeg reports decode errors | This tool/build reported errors for the examined data | That every player fails, or that the file alone caused a particular buffering event |
-| Timestamp gaps, duration/count differences | The reported timestamps or counts cross a comparison threshold | Whether an edit, variable frame rate, codec packetization, or intentional offset explains it |
-| Unsupported codec/profile, HDR, audio or subtitle combinations | Characteristics that may require different playback handling | A universal compatibility verdict for every Plex client |
-| Bitrate, interleaving, keyframe, image-pattern or HDR scene heuristic | A measurement crossed the project's chosen threshold | A confirmed defect, a standard violation, or a demonstrated cause of buffering |
-| Missing tool, timeout, skipped work | The checker has no complete result | That the file passed the omitted check |
+| **FILE ERRORS** | The input cannot be read; video/audio decoding reports a failure | Investigate first. Read the evidence: a decoder limitation or access problem can also prevent a clean test. |
+| **REVIEW** | Conflicting or invalid HDR values, unresolved decoder diagnostics, major duration differences, or suspicious full-file timestamps | A meaningful clue, not proof of the playback cause. Compare with the source and the symptom. |
+| **DEVICE SUPPORT** | Dolby Vision Profile 5; less common AVC/HEVC bit-depth or color-sampling formats; image-based subtitles | Check the actual player and selected tracks. These notes do not mean the file is damaged and do not make the scan fail. |
+| **INCOMPLETE** | A requested check timed out or its required tool was unavailable | No conclusion from that check. Optional work you did not request is not an incomplete warning. |
 
-Even strong evidence of a file error is different from proving the cause of a playback incident. Conversely, a report without warnings cannot certify every byte, every client, or every network path.
+Ordinary 10-bit HEVC, Dolby Vision Profile 7/8, multiple tracks, missing optional HDR values, and language/default-track preferences are not major findings merely because they are present. The checker does not know the capabilities of your particular Plex client.
 
-Version 0.1.2 adds a controlled one-thread retry for the specific PPS-change diagnostic in short decode samples. A matching clean retry shows that the result depended on decoder threading in that test; it does not prove every decoder will accept the file. Both attempts remain available and the result stays a warning. Timeouts, including a whole-track subtitle read that takes too long, remain incomplete checks rather than file defects.
+Plex documents that selected unsupported subtitles can require video burn-in, while unsupported audio can require audio conversion alone; actual handling depends on the client. See [Plex Direct Play and Direct Stream](https://support.plex.tv/articles/200250387-streaming-media-direct-play-and-direct-stream/). Dolby Vision Profile 5 has no HDR10-compatible base layer, as described in [Dolby's profile table](https://ott.dolby.com/OnDelKits/Dolby_Vision_Online_Delivery_Kit/v1/Documentation/Specs/Visio_Profiles/help_files/topics/c_dovi_profiles_public.html). Support for less common AVC/HEVC formats also changes with hardware and software; [NVIDIA's decoder support table](https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/nvdec-application-note/index.html) is one example, not a compatibility list for every Plex client.
 
-HDR mastering records are compared by their reported values and probe location. Optional fields absent from one record are different from malformed numbers or a disagreement between records. Valid frame metadata does not excuse an invalid stream record; both remain visible. This describes signaling, not a measurement of how the picture should look on a particular display.
+A sampled scan can miss a problem elsewhere. `--deep` expands timeline and decode coverage; a clean software decode still does not certify hardware-decoder support, picture quality, perceived lip-sync, or network performance.
+
+## Two observations that need careful wording
+
+**HDR metadata disagreement:** the checker compares supplied mastering-display records and color signaling. A conflict is worth reviewing, particularly after a conversion, but metadata is not a measurement of the picture or a reason to invent replacement brightness values. Missing optional fields are different from malformed or conflicting values. Stream/frame probe locations alone do not prove where a demuxer obtained a value.
+
+**Thread-dependent PPS diagnostic:** if a short decode sample reports only `PPS changed between slices`, it receives one controlled retry with one decoder thread. A clean retry with the same positive frame count is retained as `DECODE_THREAD_DEPENDENT` in additional diagnostics, not a major focused finding. This is weaker evidence than a reproducible decode failure. Different counts, additional errors, and failed retries remain visible for review. Both attempts are preserved in JSON and detailed output.
+
+## Additional diagnostics are optional
+
+The project began by adapting checks from the author's conversion workflow. Some of those rules are useful when investigating a specific problem, but they are **not official Plex requirements and may not predict playback trouble**. They now belong in `--advanced` or individually requested analysis.
+
+| Observation or rule | Why it is not a default major-issue verdict |
+|---|---|
+| Video burst thresholds, long keyframe gaps, separated audio/video bytes | Project thresholds have not been established as universal client or network limits. |
+| Matroska index location or MP4 faststart layout | Valid files can use different layouts; a possible optimization is not corruption. |
+| Interlace/telecine detector scores | Detectors can misclassify content. Watching moving scenes is still necessary. |
+| Sparse or zero HDR10+ scene values | Personal scene-quality rules are not HDR10+ conformance validation. |
+| Loudness outside the author's preferred target | A listening preference, not a Plex playback requirement. |
+| Language, default-track, subtitle-credit, and retained-track choices | Library preferences and conversion context, not universal file defects. |
+
+`--details` shows extra observations from the checks already run. `--advanced` actually runs the broader diagnostic set and exposes its heuristic warnings. Explicit bandwidth, expected-runtime, and reference comparisons are available when you have a relevant value or source. [CHECKS.md](../CHECKS.md) preserves the technical inventory and thresholds.
 
 ## The author's HEVC/QSV observation
 
-The author's [published test report](https://forums.plex.tv/t/hevc-hardware-transcodes-ignore-the-bitrate-limit-intel-qsv-measured-and-a-workaround/941228) describes HEVC output generated by Plex on Windows with Intel Arc/QSV. In a controlled test, a negotiated limit near 8.9 Mbps accompanied roughly 36.9 Mbps average output; replacing the quality parameter with an explicit bitrate target brought the average to roughly 7.4 Mbps.
+The author's [published test report](https://forums.plex.tv/t/hevc-hardware-transcodes-ignore-the-bitrate-limit-intel-qsv-measured-and-a-workaround/941228) describes a Plex HEVC transcoding bitrate overshoot on Windows with Intel Arc/QSV. That is an observation in the reported setup, not a claim that every HEVC file or Plex version has the problem. It is not an official Plex diagnosis or a statement about current fix status.
 
-This is a **measured observation in the reported setup**, supporting a rate-control problem there. It is not a claim that every HEVC file, every QSV configuration, or every Plex version has the same defect. The report did not fully separate HEVC from the 10-bit input variable, and its numerical findings are not an official Plex diagnosis or a claim about current fix status.
+**This checker cannot detect that server behavior by inspecting a movie.** Diagnosis requires evidence from the affected transcode session and its generated output. A high source bitrate or an HEVC source codec does not establish it.
 
-**This checker cannot detect that server behavior by inspecting the original movie.** Diagnosis needs the affected session's negotiated target, actual encoder/output settings, and generated segment sizes and durations. A source marked HEVC may be transcoded to H.264; that alone does not reproduce an HEVC-encoding problem. The checker neither installs a transcoder workaround nor changes Plex settings.
+## What to do with a finding
 
-## Rules from the author's workflow that remain hypotheses or preferences
+1. Start with file errors, then review findings. Keep the original file.
+2. Match the finding to the actual symptom and selected tracks. A device-support note needs the player/app details.
+3. Use `--deep` if damage outside the samples is suspected; use `--details` if someone needs evidence.
+4. Test one change at a time. Do not convert a working movie merely to clear a report.
+5. Report false positives too. A file that triggers a finding but plays correctly helps improve the checker.
 
-| Observation or rule | Status in this project | Reason to avoid treating it as proof |
-|---|---|---|
-| Large one-second video bursts might contribute to remote buffering | Plausible bandwidth concern; 50 Mbps HD / 160 Mbps UHD warning thresholds are project heuristics, with peak/average ratio as extra context | Buffers, audio, overhead, sustained throughput and delivery timing all matter. A burst can exceed a link rate without causing a stall. |
-| Widely separated audio/video bytes might make remote reads less efficient | 75 MiB sampled separation is a heuristic | It is not measured lip-sync, network latency, or a reproduced Plex failure. |
-| Matroska Cues near the beginning or MP4 faststart may help access | Layout information and a possible optimization | End-position indexes can be valid. Plex's playback/remux path may change their relevance. |
-| Long gaps between keyframes may make seeking/recovery harder | 12-second/30-second thresholds are project choices | There is no universal Plex maximum established by these checks. |
-| Interlace or telecine detectors indicate a conversion candidate | Pattern analysis with false positives, especially animation and synthetic images | A detector score cannot replace watching moving scenes. Progressive video can be misclassified. |
-| Sparse or zero HDR10+ scene data looks suspicious | Personal scene-quality heuristic, not HDR10+ conformance validation | Dark scenes and legitimate metadata choices can trigger it. Do not remove or rewrite HDR data just to clear a warning. |
-| Loudness differs from -23 LUFS / -2 dBTP / 7 LU | Optional reference target from the workflow | This is not a Plex playback requirement or a universal listening target. |
-| Fewer packets/frames or shorter duration than expected | Useful mismatch to investigate | Different editions, trims, packetization and timing can explain differences. A reference comparison is metadata only. |
-
-Exact thresholds and sampling details are in [CHECKS.md](../CHECKS.md). A measured threshold crossing is real as a measurement; its importance to playback may remain unproven.
-
-## How to investigate a warning
-
-1. Save the report and record the exact playback symptom and time, if there is one.
-2. Check the affected client, selected audio/subtitle tracks, quality setting, and whether Plex used Direct Play, Direct Stream or transcoding.
-3. If a short scan found possible damage, run `--deep` when practical. If a check failed because a tool is missing, resolve that before interpreting it.
-4. Reproduce the same scene under the same conditions. Compare one change at a time, keeping the original file.
-5. Report counterexamples too: a valid file that triggers a warning but plays correctly helps improve the rule. Include measurements rather than labeling every flag a Plex bug.
-
-The software is intentionally read-only. It recommends investigation, not automatic repair or library-wide conversion.
+The checker is read-only. It does not repair files or change Plex settings.

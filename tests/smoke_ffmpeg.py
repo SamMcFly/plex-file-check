@@ -52,14 +52,28 @@ def main():
         require_ok([sys.executable, ROOT / "build_release.py", "--output-dir", scratch / "build"])
         source = ROOT / "plex_check.py"
         portable = scratch / "build" / "plex-file-check.pyz"
-        report = inspect(source, mkv, "--deep", "--no-visual")
+        report = inspect(source, mkv, "--deep")
         assert report["metrics"]["full_decode"].get("clean"), report["findings"]
         assert report["metrics"]["full_decode"]["decoded_video_frames"] == 72
         assert not report["counts"].get("error"), report["findings"]
-        report = inspect(portable, mp4, "--redact-name", "--no-visual")
+        assert report["profile"] == "focused" and report["exit_code"] == 0, report["findings"]
+        assert "visual_samples" not in report["metrics"]
+        assert "embedded_subtitles" not in report["metrics"]
+        report = inspect(portable, mp4, "--redact-name")
         assert report["file"] == "media.mp4"
         assert report["metrics"]["container"]["container_structure"]["moov_before_mdat"]
         assert not report["counts"].get("error"), report["findings"]
+        assert report["exit_code"] == 0, report["findings"]
+        assert "packets" not in report["metrics"]
+        compact = run([sys.executable, portable, mp4, "--quiet"])
+        assert compact.returncode == 0, compact.stderr
+        assert "No major file problems" in compact.stdout
+        assert "COVERAGE" not in compact.stdout and "INFO / CONTEXT" not in compact.stdout
+        expanded = run([sys.executable, portable, mp4, "--quiet", "--details"])
+        assert expanded.returncode == 0 and "COVERAGE" in expanded.stdout
+        audit = inspect(portable, mp4, "--advanced", "--no-visual")
+        assert audit["profile"] == "advanced" and "packets" in audit["metrics"]
+        assert "embedded_subtitles" in audit["metrics"]
         prefix = scratch / "report"
         result = run([sys.executable, portable, mkv, "--quick", "--report", prefix])
         assert result.returncode in (0, 1), result.stderr

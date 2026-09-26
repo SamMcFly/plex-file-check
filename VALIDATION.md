@@ -1,4 +1,16 @@
-# Validation of 0.1.x
+# Validation
+
+## Version 0.2.0
+
+Verified on Windows with Python 3.12. The default scan and report now focus on file errors, stronger warning signs, and conditional device support. This changes presentation and scan scope; it does not certify playback on any Plex client.
+
+- 166 automated regression tests passed, including focused/advanced scan boundaries, explicitly requested options, missing tools and timeouts, diagnostic retention, device-note grouping, substantial measured audio/video duration differences, and coverage labeling for controlled decoder retries.
+- Native FFmpeg smoke checks passed for the source and packaged `.pyz`: clean focused results, compact and detailed text, advanced packet/subtitle scope, deep H.264/AAC Matroska decoding (72 frames), and MP4 structure.
+- Synthetic input hashes stayed unchanged. Unicode filenames, report overwrite refusal, missing tools, and empty input handling passed.
+- A focused scan of the current 44.8 GB HEVC/Dolby Vision Profile 8.1 file completed with no major findings and one grouped image-subtitle device note. Its observed HDR records agreed (1,000-nit mastering maximum). Two controlled threading-dependent PPS observations remained in additional diagnostics with both attempts retained. File size and modification time were unchanged during the scan; this was not a whole-file decode or content-hash comparison.
+- The release builder checks Python 3.9 syntax. macOS and Linux still require actual-host validation; the inactive CI template is not evidence of a passed platform run.
+
+## Earlier 0.1.x validation
 
 Version 0.1.2 adds controlled decoder retries, mastering-record comparisons, longer whole-track subtitle limits and clearer report identity/summary information. Version 0.1.1 was a documentation-only update.
 

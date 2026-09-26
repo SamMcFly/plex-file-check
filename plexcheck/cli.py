@@ -8,6 +8,7 @@ from . import __version__
 from .common import finding
 from .process import locate
 from .scan import scan
+from .assessment import split_findings, scope_note
 
 
 def positive(value):
@@ -22,9 +23,11 @@ def make_parser():
     parser.add_argument("file", type=Path, help="local media file to inspect")
     parser.add_argument("--version", action="version", version="Plex File Check " + __version__)
     depth = parser.add_mutually_exclusive_group()
-    depth.add_argument("--quick", action="store_true", help="metadata, container indexing, and sidecar subtitles only")
+    depth.add_argument("--quick", action="store_true", help="metadata and essential container checks only; no content decoding")
     depth.add_argument("--deep", action="store_true", help="also scan every packet and fully decode primary video/all audio (can take hours)")
-    parser.add_argument("--no-visual", action="store_true", help="skip interlace/cadence and signal-level samples")
+    parser.add_argument("--advanced", action="store_true", help="run the broader diagnostic audit, including heuristics and subtitle content checks")
+    parser.add_argument("--details", action="store_true", help="show evidence and additional diagnostics from the selected scan")
+    parser.add_argument("--no-visual", action="store_true", help="skip image-pattern samples when using --advanced")
     parser.add_argument("--loudness", action="store_true", help="measure each whole audio track (slow; does not change its volume)")
     parser.add_argument("--dovi", action="store_true", help="inspect embedded HEVC Dolby Vision RPUs with optional dovi_tool (not certification)")
     parser.add_argument("--hdr10plus", action="store_true", help="inspect whole-stream HDR10+ scene metadata with optional hdr10plus_tool")
@@ -46,11 +49,16 @@ def finalize(report):
     # Collapse identical findings repeated in several samples, without discarding
     # their per-window measurements in metrics. Different evidence remains visible.
     seen, unique = set(), []
-    for item in report["findings"]:
+    for item in report["findings"] + report.get("diagnostics", []):
+        item = {k: v for k, v in item.items() if k != "category"}
         key = json.dumps(item, sort_keys=True, ensure_ascii=True)
         if key not in seen:
             seen.add(key)
             unique.append(item)
+    focused = report.get("profile") == "focused"
+    if report.get("profile"):
+        unique, diagnostics = split_findings(unique, advanced=not focused)
+        report["diagnostics"] = diagnostics
     report["findings"] = unique
     counts = Counter(f["severity"] for f in unique)
     report["counts"] = {key: counts[key] for key in ("error", "warning", "skipped", "info")}
@@ -60,10 +68,19 @@ def finalize(report):
                             "No problems detected in completed checks")
     report["exit_code"] = 2 if counts["error"] else 1 if counts["warning"] or counts["skipped"] else 0
     report["interpretation"] = "Advisory file analysis, not Plex certification. Warnings may be heuristics, not confirmed defects. Skipped checks are not passes."
+    if focused:
+        report["assessment"] = (
+            "File errors detected; investigate before converting" if counts["error"] else
+            "Potential playback issues found; review the items below" if counts["warning"] else
+            "Check incomplete; no clean result" if counts["skipped"] else
+            "No major problems found in metadata checks" if report.get("mode") == "quick" else
+            "No major file problems found in completed checks")
+        report["interpretation"] = "File errors and strong warning signs only. Device support notes are conditional, not file defects."
+        report["scope"] = scope_note(report)
     return report
 
 
-def text_report(report):
+def _detailed_text_report(report):
     lines = ["PLEX FILE CHECK " + __version__, "File: " + report["file"],
              "Mode: " + report["mode"], "Assessment: " + report["assessment"], report["interpretation"], ""]
     counts = report.get("counts", {})
@@ -99,6 +116,14 @@ def text_report(report):
                 lines.append("  Evidence: " + json.dumps(item["evidence"], ensure_ascii=True, sort_keys=True))
             if item.get("advice"):
                 lines.append("  Next step: " + item["advice"])
+    if report.get("diagnostics"):
+        lines += ["", "ADDITIONAL DIAGNOSTICS (not counted in the focused result)"]
+        for item in report["diagnostics"]:
+            lines += ["- [{}] {}".format(item["code"], item["title"]), "  " + item["detail"]]
+            if item.get("evidence"):
+                lines.append("  Evidence: " + json.dumps(item["evidence"], ensure_ascii=True, sort_keys=True))
+    if report.get("scope"):
+        lines += ["", "Scope: " + report["scope"]]
     lines += ["", "COVERAGE"]
     for item in report["coverage"]:
         lines.append("- {}: {}".format(item["check"], item["status"]))
@@ -106,6 +131,54 @@ def text_report(report):
     for tool, version in report["tools"].items():
         lines.append("- {}: {}".format(tool, version))
     lines += ["", "Exit code: {} (0=no flags; 1=warnings or incomplete checks; 2=errors; 3=unable to run/save)".format(report["exit_code"])]
+    return "\n".join(lines) + "\n"
+
+
+_SHORT_TEXT = {
+    "hdr_mastering_conflict": "HDR brightness/color metadata disagrees between records. Different players may interpret it differently; this does not prove buffering or damaged video.",
+    "hdr_mastering_invalid": "HDR mastering metadata contains invalid or inconsistent values. Compare with the original before changing brightness/color tags.",
+    "hdr_light_levels_invalid": "HDR light-level values are inconsistent. Compare with the original; this alone does not establish a playback failure.",
+    "subtitle_bitmap": "If an image-based subtitle is selected and your player cannot display it, Plex may have to burn it into the video, requiring video transcoding. Try a text subtitle or turn subtitles off if playback struggles.",
+    "dolby_vision_profile": "Dolby Vision Profile 5 has no HDR10-compatible base layer. Use a player with suitable Dolby Vision support or a supported conversion path.",
+}
+
+
+def text_report(report, details=False):
+    if details or report.get("profile") != "focused":
+        return _detailed_text_report(report)
+    lines = ["PLEX FILE CHECK " + __version__, "File: " + report["file"],
+             "Result: " + report["assessment"]]
+    meta = report.get("metrics", {}).get("metadata", {})
+    if meta.get("video_codec"):
+        lines.append("Video: {} | {} x {} | {}".format(
+            meta["video_codec"], meta.get("width", "?"), meta.get("height", "?"),
+            meta.get("pixel_format") or "unknown pixel format"))
+    counts = report.get("counts", {})
+    lines.append("{} file errors | {} to review | {} incomplete".format(
+        counts.get("error", 0), counts.get("warning", 0), counts.get("skipped", 0)))
+    groups = (("file_error", "FILE ERRORS"), ("review", "REVIEW"),
+              ("device_support", "DEVICE SUPPORT"), ("incomplete", "INCOMPLETE"))
+    for category, label in groups:
+        grouped = {}
+        for item in report["findings"]:
+            if item.get("category") == category:
+                key = (item["code"], item.get("evidence", {}).get("stream")) if item["code"] == "video_limited_hardware_support" else item["code"]
+                grouped.setdefault(key, []).append(item)
+        if grouped:
+            lines += ["", label]
+        for items in grouped.values():
+            first = items[0]
+            code = first["code"]
+            suffix = " ({} observations)".format(len(items)) if len(items) > 1 else ""
+            if code == "video_limited_hardware_support":
+                suffix += " (video stream {})".format(first.get("evidence", {}).get("stream", "?"))
+            lines.append("- " + first["title"] + suffix)
+            lines.append("  " + _SHORT_TEXT.get(code, first["detail"]))
+            if first.get("advice") and code not in _SHORT_TEXT:
+                lines.append("  Next step: " + first["advice"])
+    lines += ["", "Scope: " + report.get("scope", scope_note(report)),
+              "Playback also depends on the player and selected tracks.",
+              "Use --details for evidence; --advanced runs the broader diagnostic audit."]
     return "\n".join(lines) + "\n"
 
 
@@ -156,11 +229,12 @@ def main(argv=None):
                       timeout=args.timeout, full_timeout=args.full_timeout, bandwidth_mbps=args.bandwidth_mbps,
                       reference=args.reference.expanduser().resolve() if args.reference else None,
                       expected_runtime=args.expected_runtime, visual=not args.no_visual, dovi=args.dovi,
-                      progress=progress, redact_name=args.redact_name, loudness=args.loudness, hdr10plus=args.hdr10plus)
+                      progress=progress, redact_name=args.redact_name, loudness=args.loudness, hdr10plus=args.hdr10plus,
+                      advanced=args.advanced)
         if args.redact_name:
             report = redact(report, args.file)
         finalize(report)
-        text = text_report(report)
+        text = text_report(report, details=args.details or args.advanced)
         serialized = json.dumps(report, indent=2, ensure_ascii=True, allow_nan=False) + "\n"
         if outputs:
             for output in outputs:

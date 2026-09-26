@@ -73,6 +73,51 @@ def _bit_depth(stream):
     return None
 
 
+def _chroma_format(pixel_format):
+    """Identify explicit full-resolution/4:2:2 formats, not codec profile limits."""
+    match = re.fullmatch(r"(?:yuvj?|yuva)(422|444)p(?:(?:9|10|12|14|16)(?:le|be))?", pixel_format)
+    if match:
+        return "4:2:2" if match.group(1) == "422" else "4:4:4"
+    if re.fullmatch(r"p2(?:10|12|16)(?:le|be)?|y2(?:10|12|16)(?:le|be)|nv20(?:le|be)", pixel_format):
+        return "4:2:2"
+    if pixel_format in {"nv16", "yuyv422", "uyvy422", "yvyu422"}:
+        return "4:2:2"
+    if re.fullmatch(r"p4(?:10|12|16)(?:le|be)?", pixel_format) or pixel_format in {"nv24", "nv42"}:
+        return "4:4:4"
+    if re.fullmatch(r"gbrp(?:(?:9|10|12|14|16)(?:le|be))?", pixel_format):
+        return "4:4:4"
+    return None
+
+
+def _video_compatibility_checks(stream, findings):
+    """A device-support note, never a corruption or playback-failure verdict.
+
+    Hardware and software have separate capability limits; current hardware can
+    support some of these formats. See NVIDIA's NVDEC capabilities and FFmpeg
+    feature matrices, rather than assuming every GPU has the same limitations:
+    https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/nvdec-application-note/index.html
+    https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/ffmpeg-with-nvidia-gpu/index.html
+    """
+    codec = _text(stream.get("codec_name"))
+    if codec not in {"h264", "hevc"}:
+        return
+    depth = _bit_depth(stream)
+    pixel_format = _text(stream.get("pix_fmt"))
+    chroma = _chroma_format(pixel_format)
+    features = []
+    if depth is not None and depth > (8 if codec == "h264" else 10):
+        features.append("%d-bit video" % depth)
+    if chroma is not None:
+        features.append("RGB without chroma subsampling" if pixel_format.startswith("gbrp") else chroma + " chroma")
+    if features:
+        label = "H.264" if codec == "h264" else "HEVC"
+        findings.append(finding("video_limited_hardware_support", "info", "Video format needs a device compatibility check",
+                                "This %s stream uses %s. Hardware decoding support varies by device, driver and player; some systems support it, while others may need software decoding or transcoding. This does not establish a damaged file or a Plex playback failure." % (label, " and ".join(features)),
+                                "Check the intended device's supported video profiles, bit depths and chroma formats. Test playback before converting a working file.",
+                                stream=stream.get("index"), codec=codec, pixel_format=pixel_format or None,
+                                bit_depth=depth, chroma=chroma, features=features))
+
+
 def _color_class(stream):
     transfer = _text(stream.get("color_transfer"))
     depth = _bit_depth(stream)
@@ -325,6 +370,8 @@ def analyze_metadata(probe, frames=None, reference=None):
             if not _present(codec):
                 findings.append(finding(kind + "_codec_unknown", "warning", "A %s codec could not be identified" % kind,
                                         "The probe did not identify a codec. More analysis may distinguish limited probing from malformed data.", stream=index))
+            if kind == "video":
+                _video_compatibility_checks(stream, findings)
     video_duration = None
     if videos:
         main = videos[0]

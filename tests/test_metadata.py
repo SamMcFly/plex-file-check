@@ -33,6 +33,62 @@ def hdr_probe(records):
 
 
 class MetadataTests(unittest.TestCase):
+    def test_video_compatibility_groups_depth_and_chroma_as_one_info_note(self):
+        result = analyze_metadata(probe(codec_name="h264", pix_fmt="yuv444p10le"))
+        notes = [item for item in result[0] if item["code"] == "video_limited_hardware_support"]
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(notes[0]["severity"], "info")
+        self.assertEqual(notes[0]["evidence"]["features"], ["10-bit video", "4:4:4 chroma"])
+        self.assertEqual(notes[0]["evidence"]["stream"], 0)
+        self.assertIn("some systems support it", notes[0]["detail"])
+        self.assertIn("does not establish a damaged file", notes[0]["detail"])
+
+    def test_higher_bit_depth_compatibility_note(self):
+        for codec, pixel_format, declared, depth in (("h264", "yuv420p10le", None, 10),
+                                                    ("hevc", "yuv420p12le", None, 12),
+                                                    ("hevc", "p012le", None, 12),
+                                                    ("h264", None, "10", 10)):
+            with self.subTest(codec=codec, pixel_format=pixel_format, declared=declared):
+                result = analyze_metadata(probe(codec_name=codec, pix_fmt=pixel_format, bits_per_raw_sample=declared))
+                note = next(item for item in result[0] if item["code"] == "video_limited_hardware_support")
+                self.assertEqual(note["evidence"]["bit_depth"], depth)
+                self.assertEqual(note["evidence"]["features"], ["%d-bit video" % depth])
+
+    def test_explicit_422_and_444_formats_get_device_note(self):
+        for codec in ("h264", "hevc"):
+            for pixel_format, chroma in (("yuv422p", "4:2:2"), ("yuvj422p", "4:2:2"),
+                                        ("yuv422p10le", "4:2:2"), ("p210le", "4:2:2"),
+                                        ("nv16", "4:2:2"), ("yuyv422", "4:2:2"),
+                                        ("yuv444p", "4:4:4"), ("yuv444p10be", "4:4:4"),
+                                        ("p410le", "4:4:4"), ("nv24", "4:4:4"), ("gbrp", "4:4:4")):
+                with self.subTest(codec=codec, pixel_format=pixel_format):
+                    result = analyze_metadata(probe(codec_name=codec, pix_fmt=pixel_format))
+                    notes = [item for item in result[0] if item["code"] == "video_limited_hardware_support"]
+                    self.assertEqual(len(notes), 1)
+                    self.assertEqual(notes[0]["evidence"]["chroma"], chroma)
+
+    def test_common_video_formats_and_unestablished_formats_stay_quiet(self):
+        for codec, pixel_format, profile in (("h264", "yuv420p", "High"), ("h264", "nv12", None),
+                                             ("hevc", "yuv420p10le", "Main 10"), ("hevc", "p010le", None),
+                                             ("hevc", "yuv420p", None), ("hevc", None, None),
+                                             ("h264", "unknown444", None), ("h264", None, "High 4:4:4 Predictive"),
+                                             ("av1", "yuv444p12le", None), ("unknown", "yuv444p10le", None)):
+            with self.subTest(codec=codec, pixel_format=pixel_format, profile=profile):
+                result = analyze_metadata(probe(codec_name=codec, pix_fmt=pixel_format, profile=profile))
+                self.assertNotIn("video_limited_hardware_support", codes(result))
+
+    def test_video_compatibility_checks_each_video_but_excludes_cover_art(self):
+        p = probe()
+        p["streams"].extend([dict(index=2, codec_type="video", codec_name="h264", pix_fmt="yuv420p10le"),
+                              dict(index=3, codec_type="video", codec_name="hevc", pix_fmt="yuv422p10le"),
+                              dict(index=4, codec_type="video", codec_name="h264", pix_fmt="yuv444p10le",
+                                   disposition={"attached_pic": 1})])
+        original = copy.deepcopy(p)
+        result = analyze_metadata(p)
+        notes = [item for item in result[0] if item["code"] == "video_limited_hardware_support"]
+        self.assertEqual([item["evidence"]["stream"] for item in notes], [2, 3])
+        self.assertEqual(p, original)
+
     def test_cover_art_is_not_video(self):
         p = {"streams": [dict(codec_type="video", codec_name="mjpeg", disposition={"attached_pic": 1})]}
         findings, metrics = analyze_metadata(p)
