@@ -13,7 +13,7 @@ Internet access is needed to obtain these tools. The checker itself does not upl
 ## 1. Download the checker
 
 1. Open the project's [latest release](https://github.com/SamMcFly/plex-file-check/releases/latest).
-2. Under **Assets**, download **Plex-File-Check-v0.2.0.zip**. Use the attached release ZIP for this guide; GitHub's automatic **Source code** ZIP does not contain the built `.pyz`.
+2. Under **Assets**, download **Plex-File-Check-v0.2.1.zip**. Use the attached release ZIP for this guide; GitHub's automatic **Source code** ZIP does not contain the built `.pyz`.
 3. Extract the ZIP. On Windows, right-click it and select **Extract All**; on macOS, double-click it; on Linux, use your file manager's extract option.
 4. Open the extracted **Plex-File-Check** folder. You should see `plex-file-check.pyz`, `README.md`, and other files. Do not run it inside the ZIP viewer.
 
@@ -146,7 +146,7 @@ For **command not found**, **can't open file**, or **FFprobe was not found**, se
 
 1. Download the latest release ZIP and extract it into a new folder. Keep your previous reports if you want to compare results.
 2. If you kept FFmpeg and optional tools in the old checker's `tools` folder, copy that folder into the new **Plex-File-Check** folder. Tools already on PATH can stay where they are. You do not need to reinstall working Python or FFmpeg for every checker update.
-3. Open a terminal in the new folder using the instructions for your operating system above. Run `py -3 plex-file-check.pyz --version` on Windows, or `python3 plex-file-check.pyz --version` on macOS/Linux. This release should print **Plex File Check 0.2.0**.
+3. Open a terminal in the new folder using the instructions for your operating system above. Run `py -3 plex-file-check.pyz --version` on Windows, or `python3 plex-file-check.pyz --version` on macOS/Linux. This release should print **Plex File Check 0.2.1**.
 4. Run a scan and choose a new report prefix, such as `--report updated-check`. Old reports retain the results and checker version from when they were created.
 
 If you only use the single-file `plex-file-check.pyz`, you can instead replace that file with the new download and keep your tools beside it. If you run the source entry point `plex_check.py`, update the entire source package, including the `plexcheck` folder; replacing only the `.pyz` does not update the source entry point.

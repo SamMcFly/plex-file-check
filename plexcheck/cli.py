@@ -136,10 +136,14 @@ def _detailed_text_report(report):
 
 _SHORT_TEXT = {
     "hdr_mastering_conflict": "HDR brightness/color metadata disagrees between records. Different players may interpret it differently; this does not prove buffering or damaged video.",
-    "hdr_mastering_invalid": "HDR mastering metadata contains invalid or inconsistent values. Compare with the original before changing brightness/color tags.",
-    "hdr_light_levels_invalid": "HDR light-level values are inconsistent. Compare with the original; this alone does not establish a playback failure.",
+    "hdr_mastering_invalid": "HDR mastering metadata contains invalid or inconsistent values. Verify the intended values before changing brightness/color tags; this can also occur in an original source.",
+    "hdr_light_levels_invalid": "HDR light-level values are inconsistent. Verify the intended values; this alone does not establish a playback failure or show which process introduced them.",
     "subtitle_bitmap": "If an image-based subtitle is selected and your player cannot display it, Plex may have to burn it into the video, requiring video transcoding. Try a text subtitle or turn subtitles off if playback struggles.",
-    "dolby_vision_profile": "Dolby Vision Profile 5 has no HDR10-compatible base layer. Use a player with suitable Dolby Vision support or a supported conversion path.",
+}
+
+_DV_PROFILE_TEXT = {
+    5: "Dolby Vision Profile 5 has no HDR10-compatible base layer. Use a player with suitable Dolby Vision support or a supported conversion path.",
+    7: "Dolby Vision Profile 7 uses a dual-layer format. Full Dolby Vision playback depends on the player's enhancement-layer support; its HDR10-compatible base may provide fallback. MEL/FEL type and player support are not verified. This note does not mean the file needs conversion.",
 }
 
 
@@ -162,7 +166,12 @@ def text_report(report, details=False):
         grouped = {}
         for item in report["findings"]:
             if item.get("category") == category:
-                key = (item["code"], item.get("evidence", {}).get("stream")) if item["code"] == "video_limited_hardware_support" else item["code"]
+                if item["code"] == "video_limited_hardware_support":
+                    key = (item["code"], item.get("evidence", {}).get("stream"))
+                elif item["code"] == "dolby_vision_profile":
+                    key = (item["code"], item.get("evidence", {}).get("profile"))
+                else:
+                    key = item["code"]
                 grouped.setdefault(key, []).append(item)
         if grouped:
             lines += ["", label]
@@ -172,8 +181,15 @@ def text_report(report, details=False):
             suffix = " ({} observations)".format(len(items)) if len(items) > 1 else ""
             if code == "video_limited_hardware_support":
                 suffix += " (video stream {})".format(first.get("evidence", {}).get("stream", "?"))
-            lines.append("- " + first["title"] + suffix)
-            lines.append("  " + _SHORT_TEXT.get(code, first["detail"]))
+            title = first["title"]
+            detail = _SHORT_TEXT.get(code, first["detail"])
+            if code == "dolby_vision_profile":
+                profile = first.get("evidence", {}).get("profile")
+                if profile in _DV_PROFILE_TEXT:
+                    title = "Dolby Vision Profile {} compatibility".format(int(profile))
+                    detail = _DV_PROFILE_TEXT[profile]
+            lines.append("- " + title + suffix)
+            lines.append("  " + detail)
             if first.get("advice") and code not in _SHORT_TEXT:
                 lines.append("  Next step: " + first["advice"])
     lines += ["", "Scope: " + report.get("scope", scope_note(report)),

@@ -8,12 +8,12 @@ The default scan focuses on file errors, stronger clues, and a few important dev
 |---|---|
 | **FILE ERRORS** | Errors reported while reading or decoding the file. Tool limitations and access failures still need to be distinguished from media damage. |
 | **REVIEW** | Invalid/conflicting HDR signaling, unresolved decode diagnostics, unidentified codecs or invalid dimensions, substantial duration discrepancies, suspicious deep timeline findings, and explicitly requested comparisons. |
-| **DEVICE SUPPORT** | Dolby Vision Profile 5, less common AVC/HEVC bit-depth or chroma formats, and image-based subtitles if selected. These are informational and do not change the exit code. |
+| **DEVICE SUPPORT** | Dolby Vision Profiles 5 and 7, less common AVC/HEVC bit-depth or chroma formats, and image-based subtitles if selected. These are informational and do not change the exit code. |
 | **INCOMPLETE** | A check that was requested but could not produce a complete result. |
 
 The default mode reads metadata and basic container structure, probes early video-frame HDR metadata, and performs short video/audio decode samples. `--quick` reads metadata and basic container structure without decoding content. `--deep` adds full audio/video packet timelines and full decoding of the primary video and all audio.
 
-Ordinary HEVC 10-bit, Dolby Vision Profile 7/8, audio-format inventory, missing optional HDR metadata, and track/language preferences are not major findings by themselves. A clean, matching single-thread retry of an isolated PPS-change diagnostic is additional context rather than a focused warning. All retained observations remain available through JSON or `--details`.
+Ordinary HEVC 10-bit, Dolby Vision Profile 8, audio-format inventory, missing optional HDR metadata, and track/language preferences are not major findings by themselves. Profile 7 has an HDR10-compatible base layer; full Dolby Vision support depends on its enhancement layer and player. Its visible support note is not a file error or conversion instruction. The checker does not classify MEL/FEL enhancement layers, even with `--dovi`. A clean, matching single-thread retry of an isolated PPS-change diagnostic is additional context rather than a focused warning. All retained observations remain available through JSON or `--details`.
 
 ## Additional diagnostics
 
@@ -44,7 +44,7 @@ Many advanced thresholds are personal screening choices. They are **not Plex req
 | `Get-HDR10LightLevels` | `signalstats` code-level measurements | `--advanced`; same visual samples; does not misrepresent luma proxy as physical mastering luminance |
 | `Measure-AudioLoudness`, `Test-LoudnormSkipEligibility` | Integrated LUFS, true peak and LRA, silence/incomplete states, optional reference-target comparison | `--loudness`; every whole audio track. −23 LUFS / −2 dBTP / 7 LU is an optional consistency preference, not a Plex requirement. Volume is unchanged. |
 | `Test-SrtFileValid`, subtitle extraction validation, `Test-IsSubtitleCredit` | Structural/timestamp/text validation of matching external SRT and temporarily extracted embedded text tracks; credit candidates advisory | `--advanced`; no OCR or deletion; runtime + 5 s bound for extracted subtitles. Conversion may lose styling or mask original representation problems. Bitmap support remains client-specific. |
-| `Test-DVHEVCRPUIntegrity`, `ConvertFrom-DoviToolSummary`, `Get-DVRPUStaticMetadata` | Stream copy piped to dovi_tool, RPU summary/profile and decoded-frame count comparison | `--dovi`; use `--deep` for actual video-frame count. Successful parsing or equal counts do not establish alignment, source preservation, or player support. |
+| `Test-DVHEVCRPUIntegrity`, `ConvertFrom-DoviToolSummary`, `Get-DVRPUStaticMetadata` | Stream copy piped to dovi_tool, RPU summary/profile and decoded-frame count comparison | `--dovi`; use `--deep` for actual video-frame count. Does not classify MEL/FEL. Successful parsing or equal counts do not establish alignment, source preservation, or player support. |
 | `Test-HDR10MetadataQuality`, `Test-HDR10ProcessingViability` | Whole-stream HDR10+ extraction and scene heuristics | `--hdr10plus`; advisory scoring inherited from a personal pipeline, not an HDR10+ conformance test or proof of a Plex defect. No payload repairs. |
 | `Test-SourceRuntime` | User-provided expected runtime comparison | `--expected-runtime`; >15% short warning; no external movie-database account or guessed title matching |
 | Reference count/duration gates | Compare optional original-file metadata and retained audio/subtitle track counts | `--reference`; alternate editions/trims may explain differences |

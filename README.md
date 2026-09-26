@@ -8,7 +8,7 @@ The checker reads your file without changing it. It needs no Plex account and do
 
 **New to scripts? Follow the [step-by-step setup guide](docs/SETUP.md).** You need Python 3.9 or newer and FFmpeg with ffprobe. No coding knowledge or Python packages from pip are needed.
 
-Download **Plex-File-Check-v0.2.0.zip** from [Releases](https://github.com/SamMcFly/plex-file-check/releases/latest), extract it, and open a terminal in the extracted `Plex-File-Check` folder.
+Download **Plex-File-Check-v0.2.1.zip** from [Releases](https://github.com/SamMcFly/plex-file-check/releases/latest), extract it, and open a terminal in the extracted `Plex-File-Check` folder.
 
 On Windows:
 
@@ -53,7 +53,9 @@ For help with one finding, add **`--details`** to show its evidence and the cove
 
 ## What this can tell you
 
-An unreadable file or repeatable decoder failure is useful evidence. Device-support notes focus on Dolby Vision Profile 5, less common AVC/HEVC bit-depth or color-sampling formats, and image-based subtitles. Compare them with the actual player's support and selected tracks. **No format is declared broken simply because some devices cannot play it directly.**
+An unreadable file or repeatable decoder failure is useful evidence. Device-support notes focus on Dolby Vision Profiles 5 and 7, less common AVC/HEVC bit-depth or color-sampling formats, and image-based subtitles. Profile 7 has an HDR10-compatible base layer; full Dolby Vision playback depends on the enhancement layer and player. The checker does not identify MEL versus FEL, even with `--dovi`. **A support note is not a file error or an instruction to convert.**
+
+You can check an original source before MCEBuddy or check the processed output. Save separate reports for the actual source/output pair: a finding already present in the original is not evidence that MCEBuddy introduced it. See [before-and-after checks](docs/USAGE.md#checking-before-and-after-processing).
 
 The author's conversion-workflow observations are documented separately in [findings and limitations](docs/FINDINGS_AND_LIMITS.md), including rules whose connection to playback remains unproven. A file scan cannot establish the author's reported Plex HEVC/QSV transcode bitrate problem or diagnose every cause of buffering.
 

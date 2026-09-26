@@ -24,7 +24,7 @@ def category(item, advanced=False):
         return "file_error"
     if code in {"subtitle_bitmap", "video_limited_hardware_support"}:
         return "device_support"
-    if code == "dolby_vision_profile" and evidence.get("profile") == 5:
+    if code == "dolby_vision_profile" and evidence.get("profile") in (5, 7):
         return "device_support"
     if not advanced:
         if code in _DIAGNOSTIC_CODES:

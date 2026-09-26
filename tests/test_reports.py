@@ -94,11 +94,51 @@ class FocusedReportTests(unittest.TestCase):
         self.assertNotIn("Evidence:", text)
         self.assertNotIn("COVERAGE", text)
 
-    def test_ordinary_dolby_vision_fallback_is_not_a_device_warning(self):
-        for profile in (7, 8):
+    def test_other_dolby_vision_profiles_stay_in_additional_diagnostics(self):
+        for profile in (8, 10, None):
             data = focused(finding("dolby_vision_profile", "info", "Dolby Vision", "Context", profile=profile))
             self.assertFalse(data["findings"])
             self.assertEqual(len(data["diagnostics"]), 1)
+
+    def test_dv7_visible_in_focused_report_without_warning_exit(self):
+        from plexcheck.metadata import analyze_metadata
+        findings, metadata = analyze_metadata({"format": {"duration": "20"}, "streams": [
+            {"index": 0, "codec_type": "video", "codec_name": "hevc", "width": 3840, "height": 2160,
+             "pix_fmt": "yuv420p10le", "color_transfer": "smpte2084", "color_primaries": "bt2020",
+             "color_space": "bt2020nc", "avg_frame_rate": "24/1", "duration": "20",
+             "side_data_list": [{"side_data_type": "DOVI configuration record", "dv_profile": 7,
+                                 "dv_bl_signal_compatibility_id": 6, "rpu_present_flag": 1}]},
+            {"index": 1, "codec_type": "audio", "codec_name": "aac", "channels": 2, "sample_rate": "48000"},
+        ]})
+        data = focused(*findings)
+        self.assertEqual(data["exit_code"], 0)
+        dv = [f for f in data["findings"] if f["code"] == "dolby_vision_profile"]
+        self.assertEqual(len(dv), 1)
+        self.assertEqual(dv[0]["category"], "device_support")
+        self.assertEqual(dv[0]["severity"], "info")
+        text = text_report(data)
+        self.assertIn("DEVICE SUPPORT", text)
+        self.assertIn("Profile 7 compatibility", text)
+        self.assertIn("HDR10-compatible base", text)
+        self.assertIn("MEL/FEL type and player support are not verified", text)
+        self.assertNotIn("Profile 5", text)
+        self.assertIn("does not identify MEL versus FEL", text_report(data, details=True))
+
+    def test_dv5_and_dv7_do_not_share_wrong_profile_text(self):
+        data = focused(*[finding("dolby_vision_profile", "info", "Dolby Vision", "Context", profile=p) for p in (5, 7)])
+        text = text_report(data)
+        self.assertIn("Profile 5 compatibility", text)
+        self.assertIn("Profile 7 compatibility", text)
+        self.assertIn("no HDR10-compatible base layer", text)
+        self.assertIn("its HDR10-compatible base may provide fallback", text)
+        self.assertEqual(data["exit_code"], 0)
+
+    def test_dv7_note_does_not_hide_real_errors(self):
+        data = focused(finding("dolby_vision_profile", "info", "Dolby Vision", "Context", profile=7),
+                       finding("DECODE_ERRORS", "error", "Decoder error", "Invalid NAL"))
+        self.assertEqual(data["exit_code"], 2)
+        self.assertIn("FILE ERRORS", text_report(data))
+        self.assertIn("DEVICE SUPPORT", text_report(data))
 
     def test_distinct_video_compatibility_reasons_remain_visible(self):
         data = focused(

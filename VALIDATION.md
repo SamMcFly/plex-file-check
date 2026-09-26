@@ -1,5 +1,11 @@
 # Validation
 
+## Version 0.2.1
+
+- 169 regression tests passed on Windows/Python 3.12, including a metadata-to-report Profile 7 case, separate Profile 5/7 wording, unchanged informational exit behavior, and preservation of actual decode errors.
+- A read-only quick scan of an original HEVC/Dolby Vision Profile 7 Matroska source displayed the new conditional device-support note and returned exit code 0. This validated profile detection and reporting, not MEL/FEL classification, decoding, or playback on a Plex device.
+- No new scan stages or external tools were added. The platform and payload-validation limitations below still apply.
+
 ## Version 0.2.0
 
 Verified on Windows with Python 3.12. The default scan and report now focus on file errors, stronger warning signs, and conditional device support. This changes presentation and scan scope; it does not certify playback on any Plex client.

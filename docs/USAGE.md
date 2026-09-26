@@ -14,6 +14,17 @@ One command checks one local file, including files on mounted storage that your 
 
 `--report PREFIX` saves `PREFIX.txt` and `PREFIX.json`. Use a new prefix for each scan. Relative names save in the terminal's current folder; a writable full path also works. Do not add `.txt` to the prefix. Without `--report`, results appear only in the terminal.
 
+## Checking before and after processing
+
+The same check works on an original source before MCEBuddy and on its processed output. Keep the original and save a separate report for each file:
+
+```sh
+python3 plex-file-check.pyz "Original.mkv" --redact-name --report source-check
+python3 plex-file-check.pyz "Processed.mkv" --redact-name --report output-check
+```
+
+Use the actual source that produced that output. Reports from another download, edition, or earlier file with the same name are not interchangeable. Check the file identity in JSON or `--details` when comparing copies. A finding in the original does not show that MCEBuddy created it; a device-support note does not require conversion. The optional `--reference` comparison below checks metadata only.
+
 ## When to do more
 
 | Option | Use it when… |
@@ -40,7 +51,7 @@ These run only when requested; neither `--deep` nor `--advanced` enables them au
 | Option | Purpose and limitation |
 |---|---|
 | `--bandwidth-mbps 20` | Compare measured file-video bitrate with a budget you supply. It is not a speed test and does not include the complete audio/protocol budget or live Plex output. |
-| `--dovi` | Inspect HEVC Dolby Vision payloads using `dovi_tool`. Add `--deep` for a decoded-frame count comparison. Matching counts do not prove alignment or player support. |
+| `--dovi` | Inspect HEVC Dolby Vision payloads using `dovi_tool`. Add `--deep` for a decoded-frame count comparison. The checker does not classify MEL/FEL enhancement layers. Matching counts do not prove alignment or player support. |
 | `--hdr10plus` | Inspect HEVC HDR10+ payloads using `hdr10plus_tool`. Scene-quality rules are heuristics, not a conformance test. |
 | `--loudness` | Measure every full audio track. Its target comparison is a listening preference, not a Plex requirement. |
 | `--reference "Original.mkv"` | Compare track counts and runtime metadata against the same edition. It does not compare picture quality or prove preservation. |

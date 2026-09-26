@@ -321,7 +321,7 @@ def _hdr_checks(stream, frames, findings, metrics):
         if profile == 5:
             note = "Dolby Vision Profile 5 has no HDR10-compatible base layer; playback depends on Dolby Vision support or correct tone mapping."
         elif profile == 7:
-            note = "Dolby Vision Profile 7 uses a dual-layer format. Support varies by player and device."
+            note = "Dolby Vision Profile 7 uses a dual-layer format with an HDR10-compatible base layer. Full Dolby Vision playback depends on the player's enhancement-layer support; HDR10 fallback may work. This checker does not identify MEL versus FEL or verify player support."
         elif profile == 8:
             base = {1: "HDR10", 2: "SDR", 4: "HLG"}.get(compatibility, "unspecified")
             note = "Dolby Vision Profile 8 declares %s base-layer compatibility; support still depends on the player." % base

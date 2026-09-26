@@ -8,12 +8,16 @@ The default checker focuses on file errors and useful compatibility clues. It is
 |---|---|---|
 | **FILE ERRORS** | The input cannot be read; video/audio decoding reports a failure | Investigate first. Read the evidence: a decoder limitation or access problem can also prevent a clean test. |
 | **REVIEW** | Conflicting or invalid HDR values, unresolved decoder diagnostics, major duration differences, or suspicious full-file timestamps | A meaningful clue, not proof of the playback cause. Compare with the source and the symptom. |
-| **DEVICE SUPPORT** | Dolby Vision Profile 5; less common AVC/HEVC bit-depth or color-sampling formats; image-based subtitles | Check the actual player and selected tracks. These notes do not mean the file is damaged and do not make the scan fail. |
+| **DEVICE SUPPORT** | Dolby Vision Profiles 5 and 7; less common AVC/HEVC bit-depth or color-sampling formats; image-based subtitles | Check the actual player and selected tracks. These notes do not mean the file is damaged and do not make the scan fail. |
 | **INCOMPLETE** | A requested check timed out or its required tool was unavailable | No conclusion from that check. Optional work you did not request is not an incomplete warning. |
 
-Ordinary 10-bit HEVC, Dolby Vision Profile 7/8, multiple tracks, missing optional HDR values, and language/default-track preferences are not major findings merely because they are present. The checker does not know the capabilities of your particular Plex client.
+Ordinary 10-bit HEVC, Dolby Vision Profile 8, multiple tracks, missing optional HDR values, and language/default-track preferences are not major findings merely because they are present. Profile 7 appears as a conditional device-support note, not a warning. The checker does not know the capabilities of your particular Plex client.
 
-Plex documents that selected unsupported subtitles can require video burn-in, while unsupported audio can require audio conversion alone; actual handling depends on the client. See [Plex Direct Play and Direct Stream](https://support.plex.tv/articles/200250387-streaming-media-direct-play-and-direct-stream/). Dolby Vision Profile 5 has no HDR10-compatible base layer, as described in [Dolby's profile table](https://ott.dolby.com/OnDelKits/Dolby_Vision_Online_Delivery_Kit/v1/Documentation/Specs/Visio_Profiles/help_files/topics/c_dovi_profiles_public.html). Support for less common AVC/HEVC formats also changes with hardware and software; [NVIDIA's decoder support table](https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/nvdec-application-note/index.html) is one example, not a compatibility list for every Plex client.
+Plex documents that selected unsupported subtitles can require video burn-in, while unsupported audio can require audio conversion alone; actual handling depends on the client. See [Plex Direct Play and Direct Stream](https://support.plex.tv/articles/200250387-streaming-media-direct-play-and-direct-stream/).
+
+Dolby Vision Profile 5 has no HDR10-compatible base layer. Profile 7 does have one, but full Dolby Vision playback depends on support for its enhancement layer and the player's playback path. See [Dolby's profile table](https://ott.dolby.com/OnDelKits/Dolby_Vision_Online_Delivery_Kit/v1/Documentation/Specs/Visio_Profiles/help_files/topics/c_dovi_profiles_public.html). The checker does **not** distinguish MEL (minimum enhancement layer) from FEL (full enhancement layer), including when `--dovi` is used. A Profile 7 note alone does not mean conversion is needed.
+
+Support for less common AVC/HEVC formats also changes with hardware and software; [NVIDIA's decoder support table](https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/nvdec-application-note/index.html) is one example, not a compatibility list for every Plex client.
 
 A sampled scan can miss a problem elsewhere. `--deep` expands timeline and decode coverage; a clean software decode still does not certify hardware-decoder support, picture quality, perceived lip-sync, or network performance.
 
@@ -43,6 +47,10 @@ The project began by adapting checks from the author's conversion workflow. Some
 The author's [published test report](https://forums.plex.tv/t/hevc-hardware-transcodes-ignore-the-bitrate-limit-intel-qsv-measured-and-a-workaround/941228) describes a Plex HEVC transcoding bitrate overshoot on Windows with Intel Arc/QSV. That is an observation in the reported setup, not a claim that every HEVC file or Plex version has the problem. It is not an official Plex diagnosis or a statement about current fix status.
 
 **This checker cannot detect that server behavior by inspecting a movie.** Diagnosis requires evidence from the affected transcode session and its generated output. A high source bitrate or an HEVC source codec does not establish it.
+
+## Original sources and processed files
+
+Checks apply to either an original file or a processed output. A finding already present before MCEBuddy is not evidence that MCEBuddy introduced it. Compare separate reports from the exact source/output pair; another download or a file with the same movie title may contain different tracks, metadata, or video. File size and modification time help identify a copy but do not prove identical content or source history.
 
 ## What to do with a finding
 

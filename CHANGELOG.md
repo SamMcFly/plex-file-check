@@ -1,3 +1,9 @@
+# 0.2.1 — 2026-09-26
+
+- Show Dolby Vision Profile 7 in the focused DEVICE SUPPORT section, alongside Profile 5. The note explains conditional HDR10 fallback and enhancement-layer support without declaring a damaged file or recommending automatic conversion.
+- Keep Profile 5 and Profile 7 explanations distinct. The checker does not identify MEL/FEL or certify a player's Dolby Vision support.
+- Clarify that HDR metadata findings can exist in original sources and do not establish that MCEBuddy or another conversion process caused them. No additional scan steps or tools are required.
+
 # 0.2.0 — 2026-09-26
 
 - Make the default scan focus on file errors, strong warning signs, and a few conditional device-support limitations. Standard scans keep short video/audio decode samples and early HDR metadata checks.
